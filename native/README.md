@@ -93,6 +93,10 @@ This shows the interface with a stand-in model and pretend downloads
 (`engine.web.ts`, `downloads.web.ts` and `db.web.ts` in `src/lib`). It is for checking
 layout; system bars, menus and Liquid Glass only appear on an iPhone.
 
+In the preview the app's state and actions are available in the browser
+console as `pocket` (for example `pocket.app.get()`), which is how scripted
+checks drive it.
+
 ## Dory support
 
 Nemotron Dory uses a model format that llama.cpp has not released support for

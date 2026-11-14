@@ -3,6 +3,7 @@ import { Appearance } from 'react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { app, start } from '../lib/app';
+import '../lib/preview';
 import { useTheme } from '../ui/theme';
 
 export default function RootLayout() {
