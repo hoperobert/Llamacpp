@@ -57,10 +57,15 @@ function PhotoRow({ t }: { t: Theme }) {
         t={t} icon="photo" title="Photos"
         value={
           progress?.status === 'downloading' ? `${percent}%`
+          : progress?.status === 'finishing' ? 'Finishing…'
+          : progress?.status === 'paused' ? 'Resume'
           : progress?.status === 'failed' ? 'Retry'
           : onDevice ? 'Loading…' : `Get · ${formatMB(addon.sizeMB)}`
         }
-        onPress={onDevice || progress?.status === 'downloading' ? undefined : () => download(addon)}
+        onPress={
+          onDevice || progress?.status === 'downloading' || progress?.status === 'finishing'
+            ? undefined : () => download(addon)
+        }
       />
     </Section>
   );

@@ -26,6 +26,7 @@ export const ModelRow = React.memo(function ModelRow({ t, model, onUsed }: {
 
   const suits = fit(model, ramMB);
   const downloading = dl?.status === 'downloading';
+  const finishing = dl?.status === 'finishing';
   const progress = dl && dl.total ? Math.min(1, dl.loaded / dl.total) : 0;
 
   const more = () => {
@@ -47,6 +48,8 @@ export const ModelRow = React.memo(function ModelRow({ t, model, onUsed }: {
     const left = dl.speed > 0 ? formatDuration((dl.total - dl.loaded) / dl.speed) : '';
     detail = [`${formatMB(dl.loaded / 1e6)} of ${formatMB(dl.total / 1e6)}`, formatSpeed(dl.speed), left]
       .filter(Boolean).join(' · ');
+  } else if (finishing) {
+    detail = 'Finishing…';
   } else if (dl?.status === 'paused') {
     detail = dl.loaded > 0 ? `Paused at ${Math.round(progress * 100)}%` : 'Paused';
   } else if (loadingThis) {
@@ -69,7 +72,7 @@ export const ModelRow = React.memo(function ModelRow({ t, model, onUsed }: {
             <Icon name="checkmark.circle.fill" size={18} color={t.c.good} />
             <Text style={[styles.inUseText, { color: t.c.good }]}>In use</Text>
           </View>
-        ) : downloading ? (
+        ) : finishing ? null : downloading ? (
           <Circle t={t} icon="pause.fill" label="Pause" onPress={() => pause(model)} />
         ) : onDevice ? (
           <Pill
@@ -83,7 +86,7 @@ export const ModelRow = React.memo(function ModelRow({ t, model, onUsed }: {
             onPress={() => download(model)}
           />
         )}
-        {(onDevice || dl) && !downloading && (
+        {(onDevice || dl) && !downloading && !finishing && (
           <Pressable onPress={more} hitSlop={10} accessibilityLabel={`More for ${model.name}`} style={styles.more}>
             <Icon name="ellipsis" size={18} color={t.c.secondary} />
           </Pressable>

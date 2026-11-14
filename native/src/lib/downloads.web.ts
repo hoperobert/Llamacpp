@@ -5,7 +5,7 @@
 import type { Model } from './models';
 
 export type DownloadState = {
-  status: 'downloading' | 'paused' | 'failed';
+  status: 'downloading' | 'paused' | 'failed' | 'finishing';
   loaded: number;
   total: number;
   speed: number;
@@ -59,3 +59,5 @@ export async function deleteModel(model: Model) {
   done.delete(model.id);
   listener(model.id, null, false);
 }
+
+export function resumeFailedDownloads() {}

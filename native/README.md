@@ -54,8 +54,10 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   side menu.
 - **Models** are grouped by speed, and can be added from a link to any GGUF
   file. Ones too big for the iPhone are not offered.
-- **Downloads** carry on in the background, show speed and time remaining,
-  restart themselves after an app update, and ask before using mobile data.
+- **Downloads** arrive in 64 MB pieces that are saved as they finish, so a lost
+  connection, a pause, closing the app or an app update never costs more than
+  the piece in flight. They carry on in the background, pick up by themselves
+  when the connection returns, and show speed and time remaining.
 - **Thinking**, a reply **style** (Normal, Concise, Explain, Formal) and reply
   length are set from the "+" in the message box.
 - **Photos** can be sent to models that can look at them (Qwen3.5 2B and 4B,
@@ -135,4 +137,5 @@ npx expo-doctor
 `npm test` runs the app's real database and download code under Node, with
 stand-ins for the phone-only modules (`tests/mocks`). It covers the one-time
 import of older chats and memories, search, projects, and a download whose
-saved link has expired.
+connection drops, whose app is closed or updated part-way, or that is
+interrupted while its pieces are being joined.

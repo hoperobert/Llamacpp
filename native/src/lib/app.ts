@@ -10,7 +10,7 @@ import * as Speech from 'expo-speech';
 
 import { freeDiskMB, ramMB } from './device';
 import {
-  deleteModel, isDownloaded, modelUri, pauseDownload, restoreDownloads, startDownload,
+  deleteModel, isDownloaded, modelUri, pauseDownload, restoreDownloads, resumeFailedDownloads, startDownload,
   type DownloadState,
 } from './downloads';
 import * as engine from './engine';
@@ -218,6 +218,10 @@ export async function start() {
 
   AppState.addEventListener('change', onAppState);
   AppState.addEventListener('memoryWarning', onMemoryWarning);
+  // A download that stopped because the connection dropped carries on when it comes back.
+  Network.addNetworkStateListener((state) => {
+    if (state.isConnected && state.isInternetReachable !== false) resumeFailedDownloads();
+  });
 }
 
 // ---------- staying well-behaved in the background ----------
@@ -234,10 +238,13 @@ function onAppState(next: string) {
       engine.stop();
     }
     Speech.stop().catch(() => {});
-  } else if (next === 'active' && reloadOnReturn) {
-    const model = reloadOnReturn;
-    reloadOnReturn = null;
-    if (app.get().engine.status === 'none') loadModel(model);
+  } else if (next === 'active') {
+    resumeFailedDownloads();
+    if (reloadOnReturn) {
+      const model = reloadOnReturn;
+      reloadOnReturn = null;
+      if (app.get().engine.status === 'none') loadModel(model);
+    }
   }
 }
 
