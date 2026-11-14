@@ -96,6 +96,8 @@ const ICONS = {
   redo: '<svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>',
   trash: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  edit: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
 };
 
 const formatMB = (mb) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.round(mb)} MB`);
@@ -115,6 +117,39 @@ function toast(text, actionLabel, action) {
   $('toast').hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { $('toast').hidden = true; }, actionLabel ? 6000 : 3000);
+}
+
+/** A styled replacement for confirm(). Resolves true when the user agrees. */
+function confirmDialog(message, confirmLabel = 'Delete') {
+  return new Promise((resolve) => {
+    const dialog = $('confirmDialog');
+    $('confirmText').textContent = message;
+    $('confirmOk').textContent = confirmLabel;
+    const finish = (answer) => {
+      $('confirmOk').onclick = $('confirmCancel').onclick = dialog.onclose = null;
+      if (dialog.open) dialog.close();
+      resolve(answer);
+    };
+    $('confirmOk').onclick = () => finish(true);
+    $('confirmCancel').onclick = () => finish(false);
+    dialog.onclose = () => finish(false);
+    dialog.showModal();
+  });
+}
+
+async function copyText(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+    if (button) {
+      const original = button.innerHTML;
+      button.innerHTML = ICONS.check;
+      setTimeout(() => { button.innerHTML = original; }, 1200);
+    } else {
+      toast('Copied');
+    }
+  } catch (e) {
+    toast('Could not copy');
+  }
 }
 
 function friendlyError(e) {
@@ -459,7 +494,7 @@ async function runTurn(userText) {
 // Rendering
 // ====================================================================
 
-function messageView(message, { streaming = false, last = false } = {}) {
+function messageView(message, { streaming = false, last = false, index = -1 } = {}) {
   const node = h('div', { class: `msg ${message.role}` });
   const bubble = h('div', { class: 'bubble' });
   node.append(bubble);
@@ -467,6 +502,11 @@ function messageView(message, { streaming = false, last = false } = {}) {
   const update = (m, live) => {
     if (m.role === 'user') {
       bubble.textContent = m.content;
+      return;
+    }
+    if (live && !m.content && !m.reasoning) {
+      bubble.replaceChildren(h('span', { class: 'typing', 'aria-label': 'Working' },
+        h('i'), h('i'), h('i')));
       return;
     }
     const parts = [];
@@ -477,29 +517,82 @@ function messageView(message, { streaming = false, last = false } = {}) {
       ));
     }
     const body = h('div', { html: renderMarkdown(m.content) });
-    if (live) (body.lastElementChild || body).classList.add('cursor');
+    if (live) {
+      (body.lastElementChild || body).classList.add('cursor');
+    } else {
+      for (const pre of body.querySelectorAll('pre')) {
+        const code = pre.textContent;
+        const button = h('button', {
+          class: 'copy-code', type: 'button', 'aria-label': 'Copy code', html: ICONS.copy,
+        });
+        button.addEventListener('click', () => copyText(code, button));
+        const wrap = h('div', { class: 'code' });
+        pre.replaceWith(wrap);
+        wrap.append(pre, button);
+      }
+    }
     parts.push(body);
     bubble.replaceChildren(...parts);
   };
   update(message, streaming);
 
-  if (message.error) node.append(h('div', { class: 'error' }, message.error));
+  if (message.error) {
+    node.append(h('div', { class: 'error' },
+      message.error,
+      h('button', { class: 'text-btn', type: 'button', onclick: retryLast }, 'Try again')
+    ));
+  }
+
+  if (message.role === 'user' && !streaming && index >= 0 && index === lastUserIndex()) {
+    node.append(h('div', { class: 'msg-foot' },
+      h('button', {
+        type: 'button', 'aria-label': 'Edit message', html: ICONS.edit,
+        onclick: () => editMessage(index),
+      })
+    ));
+  }
 
   if (message.role === 'assistant' && !streaming && message.content) {
-    const foot = h('div', { class: 'msg-foot' },
-      h('button', {
-        type: 'button', 'aria-label': 'Copy', html: ICONS.copy,
-        onclick: async () => {
-          try { await navigator.clipboard.writeText(message.content); toast('Copied'); }
-          catch (e) { toast('Could not copy'); }
-        },
-      }),
+    const copy = h('button', { type: 'button', 'aria-label': 'Copy', html: ICONS.copy });
+    copy.addEventListener('click', () => copyText(message.content, copy));
+    node.append(h('div', { class: 'msg-foot' },
+      copy,
       last && h('button', { type: 'button', 'aria-label': 'Try again', html: ICONS.redo, onclick: regenerate }),
       message.speed ? h('span', { class: 'speed' }, `${message.speed.toFixed(1)} tokens/s`) : null
-    );
-    node.append(foot);
+    ));
   }
   return { node, update };
+}
+
+const lastUserIndex = () => chat.messages.map((m) => m.role).lastIndexOf('user');
+
+/** Puts a sent message back in the box and removes it and everything after it. */
+async function editMessage(index) {
+  if (busy) return;
+  const text = chat.messages[index].content;
+  chat.messages.splice(index);
+  chat.ctx = null;
+  if (chat.cut > chat.messages.length) { chat.cut = 0; chat.summary = ''; }
+  if (chat.messages.length) {
+    await saveChat();
+  } else {
+    chats = chats.filter((c) => c.id !== chat.id);
+    await store.deleteChat(chat.id).catch(console.warn);
+    chat.title = 'New chat';
+  }
+  renderAll();
+  $('input').value = text;
+  autoGrow();
+  renderComposer();
+  $('input').focus();
+}
+
+/** Asks again after a failed reply. The last message is the unanswered one. */
+function retryLast() {
+  if (busy || !engine.ready) return;
+  if (chat.messages[chat.messages.length - 1]?.role !== 'user') return;
+  renderMessages();
+  runTurn(null);
 }
 
 /** Rebuilds the message list. `failed` is an unsaved message to show at the end. */
@@ -510,14 +603,22 @@ function renderMessages(failed = null) {
       nodes.push(h('div', { class: 'divider' },
         chat.summary ? 'Earlier messages summarised' : 'Earlier messages are out of context'));
     }
-    nodes.push(messageView(m, { last: i === chat.messages.length - 1 && !failed }).node);
+    nodes.push(messageView(m, { last: i === chat.messages.length - 1 && !failed, index: i }).node);
   });
   if (failed && (failed.content || failed.error)) nodes.push(messageView(failed).node);
   $('messages').replaceChildren(...nodes);
   renderVisibility();
 }
 
+function greeting() {
+  const hour = new Date().getHours();
+  return hour < 5 ? 'Up late?' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+}
+
 function renderVisibility() {
+  $('greeting').textContent = greeting();
+  $('emptyNote').textContent = engine.ready
+    ? `${engine.model.name} is ready. Everything stays on this device.` : '';
   const hasMessages = chat.messages.length > 0 || $('messages').childElementCount > 0;
   $('onboard').hidden = engine.ready || hasMessages;
   $('empty').hidden = !engine.ready || hasMessages;
@@ -531,6 +632,9 @@ function scrollToEnd(force = false) {
 
 function renderHeader() {
   $('chatTitle').textContent = chat.title;
+  const bar = $('loadBar');
+  bar.hidden = !modelUi.loadingId;
+  bar.firstElementChild.style.width = `${Math.round(modelUi.fraction * 100)}%`;
   const chip = $('modelChip');
   if (modelUi.loadingId) {
     chip.textContent = modelUi.text || 'Loading model…';
@@ -547,27 +651,45 @@ function renderComposer() {
   sendButton.classList.toggle('busy', busy);
   sendButton.setAttribute('aria-label', busy ? 'Stop' : 'Send');
   sendButton.disabled = !busy && (!engine.ready || !$('input').value.trim());
-  $('input').placeholder = engine.ready ? 'Message' : 'Choose a model to start';
+  $('input').placeholder = engine.ready ? 'Message'
+    : modelUi.loadingId ? 'Getting the model ready…' : 'Choose a model to start';
   if (!busy && !engine.ready && chat.messages.length) {
     setStatus(modelUi.loadingId ? 'Loading model…' : 'Load a model to continue this chat.');
   }
 }
 
+function chatGroup(time) {
+  const day = 86400000;
+  const today = new Date().setHours(0, 0, 0, 0);
+  if (time >= today) return 'Today';
+  if (time >= today - day) return 'Yesterday';
+  if (time >= today - 7 * day) return 'Previous 7 days';
+  return 'Older';
+}
+
 function renderChatList() {
   const list = $('chatList');
   if (!chats.length) {
-    list.replaceChildren(h('div', { class: 'chat-empty' }, 'No chats yet.'));
+    list.replaceChildren(h('div', { class: 'chat-empty' }, 'Your chats will appear here.'));
     return;
   }
-  list.replaceChildren(...chats.map((c) =>
-    h('div', { class: `chat-item${c.id === chat.id ? ' current' : ''}` },
+  const nodes = [];
+  let group = '';
+  for (const c of chats) {
+    const next = chatGroup(c.updatedAt);
+    if (next !== group) {
+      group = next;
+      nodes.push(h('div', { class: 'chat-group' }, group));
+    }
+    nodes.push(h('div', { class: `chat-item${c.id === chat.id ? ' current' : ''}` },
       h('button', { class: 'open', type: 'button', onclick: () => { openChat(c); closeDrawer(); } }, c.title),
       h('button', {
         class: 'del', type: 'button', 'aria-label': `Delete chat: ${c.title}`, html: ICONS.trash,
-        onclick: () => { if (confirm(`Delete "${c.title}"?`)) deleteChat(c.id); },
+        onclick: async () => { if (await confirmDialog(`Delete "${c.title}"?`)) deleteChat(c.id); },
       })
-    )
-  ));
+    ));
+  }
+  list.replaceChildren(...nodes);
 }
 
 function renderModels() {
@@ -600,7 +722,7 @@ function renderModels() {
           html: ICONS.trash,
           onclick: async () => {
             const what = onDevice ? m.name : `the unfinished download of ${m.name}`;
-            if (!confirm(`Delete ${what} from this device?`)) return;
+            if (!(await confirmDialog(`Delete ${what} from this device?`))) return;
             await engine.deleteModel(m).catch((e) => toast(friendlyError(e)));
             await refreshCached();
             renderAll();
@@ -854,19 +976,19 @@ function setupSettings() {
   });
   $('diagnosticsBtn').addEventListener('click', copyDiagnostics);
   $('deleteChatsBtn').addEventListener('click', async () => {
-    if (!confirm('Delete every chat? This cannot be undone.')) return;
+    if (!(await confirmDialog('Delete every chat? This cannot be undone.', 'Delete all'))) return;
     chats = [];
     await store.clearChats().catch(console.warn);
     openChat(blankChat());
   });
-  $('deleteMemoriesBtn').addEventListener('click', () => {
-    if (!confirm('Delete every memory? This cannot be undone.')) return;
+  $('deleteMemoriesBtn').addEventListener('click', async () => {
+    if (!(await confirmDialog('Delete every memory? This cannot be undone.', 'Delete all'))) return;
     memories = [];
     saveMemories();
     renderMemories();
   });
   $('deleteModelsBtn').addEventListener('click', async () => {
-    if (!confirm('Delete all downloaded models? You will need to download one again to chat.')) return;
+    if (!(await confirmDialog('Delete all downloaded models? You will need to download one again to chat.', 'Delete all'))) return;
     await engine.deleteAllModels().catch((e) => toast(friendlyError(e)));
     await refreshCached();
     renderAll();
@@ -877,7 +999,10 @@ function setupSettings() {
 // Drawer, composer and other events
 // ====================================================================
 
+const wide = matchMedia('(min-width: 900px)');
+
 function openDrawer() {
+  if (wide.matches) return;
   renderChatList();
   $('drawer').classList.add('open');
   $('drawer').inert = false;
@@ -885,7 +1010,7 @@ function openDrawer() {
 }
 function closeDrawer() {
   $('drawer').classList.remove('open');
-  $('drawer').inert = true;
+  $('drawer').inert = !wide.matches;
   $('scrim').hidden = true;
 }
 
@@ -901,6 +1026,28 @@ function setupEvents() {
   $('scrim').addEventListener('click', closeDrawer);
   $('settingsBtn').addEventListener('click', openSettings);
   $('modelChip').addEventListener('click', openSettings);
+  $('drawerNew').addEventListener('click', () => {
+    closeDrawer();
+    openChat(blankChat());
+    if (engine.ready) $('input').focus();
+  });
+  wide.addEventListener('change', closeDrawer);
+  closeDrawer();
+  addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeDrawer();
+  });
+
+  // A button to get back to the newest message after scrolling up.
+  const scroller = $('scroll');
+  const updateJump = () => {
+    const away = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 240;
+    $('jump').hidden = !away;
+  };
+  scroller.addEventListener('scroll', updateJump, { passive: true });
+  $('jump').addEventListener('click', () => {
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' });
+  });
+
   $('newBtn').addEventListener('click', () => {
     openChat(blankChat());
     if (engine.ready) $('input').focus();
@@ -952,7 +1099,7 @@ function setupEvents() {
     renderComposer();
   });
 
-  for (const dialog of [$('settings'), $('ctxDialog')]) {
+  for (const dialog of [$('settings'), $('ctxDialog'), $('confirmDialog')]) {
     dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
   }
 
@@ -978,7 +1125,10 @@ async function registerServiceWorker() {
     // When an updated version takes over, reload so the page matches it.
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (hadController && !busy && !modelUi.loadingId) location.reload();
+      if (!hadController) return;
+      const idle = !busy && !modelUi.loadingId && !$('input').value.trim() && !$('settings').open;
+      if (idle) location.reload();
+      else toast('An update is ready.', 'Reload', () => location.reload());
     });
     await navigator.serviceWorker.register('sw.js');
     await navigator.serviceWorker.ready;

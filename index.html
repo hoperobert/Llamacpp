@@ -37,12 +37,19 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     </button>
   </header>
+  <div id="loadBar" hidden><div></div></div>
 
   <main id="scroll">
     <div class="column">
       <section id="onboard" hidden>
-        <h2>Pick a model</h2>
-        <p class="muted">It downloads once, then runs on this device. Nothing you type leaves it.</p>
+        <img class="mark" src="icons/icon-192.png" alt="" width="56" height="56">
+        <h2>A private assistant in your pocket</h2>
+        <ul class="points">
+          <li>Runs on this device. Nothing you type leaves it.</li>
+          <li>Works offline once a model is downloaded.</li>
+          <li>No account and no cost.</li>
+        </ul>
+        <h3>Pick a model to download</h3>
         <div id="onboardModels" class="models"></div>
         <p id="installHint" class="note" hidden>
           To keep it working offline, tap <strong>Share</strong> then
@@ -51,7 +58,8 @@
       </section>
 
       <section id="empty" hidden>
-        <h2 id="greeting">What's on your mind?</h2>
+        <h2 id="greeting"></h2>
+        <p id="emptyNote" class="muted"></p>
         <div id="suggestions" class="chips"></div>
       </section>
 
@@ -61,6 +69,9 @@
 
   <footer>
     <div class="column">
+      <button id="jump" type="button" aria-label="Jump to latest" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+      </button>
       <p id="status" aria-live="polite"></p>
       <form id="form">
         <textarea id="input" rows="1" placeholder="Message" autocomplete="off" enterkeyhint="send"></textarea>
@@ -82,6 +93,10 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
+  <button id="drawerNew" class="row-btn" type="button">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    New chat
+  </button>
   <div id="chatList"></div>
   <div class="drawer-foot">
     <button id="settingsBtn" class="row-btn" type="button">
@@ -206,6 +221,14 @@
   <div class="card-actions">
     <button id="ctxCompact" class="text-btn" type="button">Summarise now</button>
     <button id="ctxClose" class="text-btn strong" type="button">Close</button>
+  </div>
+</dialog>
+
+<dialog id="confirmDialog" class="card" aria-label="Confirm">
+  <p id="confirmText"></p>
+  <div class="card-actions">
+    <button id="confirmCancel" class="text-btn" type="button">Cancel</button>
+    <button id="confirmOk" class="text-btn danger-fill" type="button">Delete</button>
   </div>
 </dialog>
 
