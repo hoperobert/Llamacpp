@@ -1,5 +1,5 @@
-// Colours and type. A warm, quiet palette with a black and white accent. Text
-// is the system face; the serif is kept for the greeting.
+// Colours and type. A warm, quiet palette with a blue accent. Text is the
+// system face; the serif is kept for the greeting.
 
 import { useMemo } from 'react';
 import { Platform, useColorScheme } from 'react-native';
@@ -18,7 +18,7 @@ const light = {
   secondary: '#6f6d64',
   tertiary: '#a9a69b',
   line: '#e2dfd3',
-  accent: '#1a1915',
+  accent: '#2563eb',
   onAccent: '#ffffff',
   danger: '#b3261e',
   good: '#3f7d4e',
@@ -35,8 +35,8 @@ const dark: Palette = {
   secondary: '#a3a199',
   tertiary: '#6f6d67',
   line: '#3a3a37',
-  accent: '#f5f4ee',
-  onAccent: '#1c1c1a',
+  accent: '#3b82f6',
+  onAccent: '#ffffff',
   danger: '#f2776b',
   good: '#7fbf8e',
   warn: '#e0a458',

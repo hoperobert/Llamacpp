@@ -10,23 +10,11 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { app, haptic, openChat, removeChat, renameChat, shareChat, togglePin } from '../lib/app';
 import { dayGroup } from '../lib/format';
-import { store, type Chat, type ChatMeta } from '../lib/storage';
+import { store, type ChatMeta } from '../lib/storage';
 import { Icon, type IconName } from '../ui/Icon';
 import { useTheme, type Theme } from '../ui/theme';
 
 type Item = ChatMeta & { snippet?: string };
-
-/** A few words around the first place the search text appears in a chat. */
-function snippetFor(chat: Chat, query: string): string | undefined {
-  for (const message of chat.messages) {
-    const at = message.content.toLowerCase().indexOf(query);
-    if (at >= 0) {
-      const from = Math.max(0, at - 30);
-      return (from > 0 ? '…' : '') + message.content.slice(from, at + 70).replace(/\s+/g, ' ');
-    }
-  }
-  return undefined;
-}
 
 export default function ChatsMenu() {
   const t = useTheme();
@@ -38,7 +26,7 @@ export default function ChatsMenu() {
   const chatList = app.use((s) => s.chatList);
   const currentId = app.use((s) => s.chat.id);
   const [query, setQuery] = useState('');
-  const [bodies, setBodies] = useState<Chat[] | null>(null);
+  const [results, setResults] = useState<Item[]>([]);
   const [slide] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -62,24 +50,19 @@ export default function ChatsMenu() {
     },
   }), [slide, width, close]);
 
-  // The words inside chats are only read from storage once someone searches.
+  // Searching looks inside messages as well as titles, in the database.
   const searching = query.trim().length > 0;
   useEffect(() => {
-    if (searching && !bodies) store.allChats().then(setBodies);
-  }, [searching, bodies]);
+    if (!searching) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      store.searchChats(query).then((found) => { if (current) setResults(found); });
+    }, 150);
+    return () => { current = false; clearTimeout(timer); };
+  }, [query, searching, chatList]);
 
   const sections = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q) {
-      const byId = new Map((bodies ?? []).map((c) => [c.id, c]));
-      const items: Item[] = [];
-      for (const meta of chatList) {
-        const body = byId.get(meta.id);
-        const snippet = body ? snippetFor(body, q) : undefined;
-        if (meta.title.toLowerCase().includes(q) || snippet) items.push({ ...meta, snippet });
-      }
-      return items.length ? [{ title: 'Results', data: items }] : [];
-    }
+    if (searching) return results.length ? [{ title: 'Results', data: results }] : [];
     const groups = new Map<string, Item[]>();
     for (const item of chatList) {
       const title = item.pinned ? 'Pinned' : dayGroup(item.updatedAt);
@@ -89,7 +72,7 @@ export default function ChatsMenu() {
     return [...groups.entries()]
       .sort(([a], [b]) => (a === 'Pinned' ? -1 : b === 'Pinned' ? 1 : 0))
       .map(([title, data]) => ({ title, data }));
-  }, [chatList, query, bodies]);
+  }, [chatList, searching, results]);
 
   const open = async (id: string | null) => {
     haptic('select');

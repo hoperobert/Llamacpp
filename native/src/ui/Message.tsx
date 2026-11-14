@@ -152,7 +152,7 @@ function Dots({ t }: { t: Theme }) {
   }, [pulse]);
   return (
     <View style={styles.dots}>
-      <Animated.View style={[styles.dot, { backgroundColor: t.c.text, opacity: pulse }]} />
+      <Animated.View style={[styles.dot, { backgroundColor: t.c.accent, opacity: pulse }]} />
       <Text style={[styles.working, { color: t.c.secondary }]}>Working…</Text>
     </View>
   );

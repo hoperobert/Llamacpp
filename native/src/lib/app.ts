@@ -17,7 +17,7 @@ import * as engine from './engine';
 import {
   addMemory, compact, ensureRoom, extractFacts, promptMessages, replyBudget, suggestTitle, usedTokens,
 } from './logic';
-import { deleteMemory, insertMemory, loadMemories } from './memories';
+import { memoryStore } from './db';
 import { fit, formatMB, modelFromUrl, MODELS, type Model } from './models';
 import {
   blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store,
@@ -123,8 +123,8 @@ function saveMemories(next: Memory[]) {
   app.set({ memories: next });
   const kept = new Set(next.map((m) => m.id));
   const had = new Set(before.map((m) => m.id));
-  for (const m of before) if (!kept.has(m.id)) deleteMemory(m.id).catch(() => {});
-  for (const m of next) if (!had.has(m.id)) insertMemory(m).catch(() => {});
+  for (const m of before) if (!kept.has(m.id)) memoryStore.remove(m.id).catch(() => {});
+  for (const m of next) if (!had.has(m.id)) memoryStore.add(m).catch(() => {});
 }
 
 async function saveChat(next: Chat): Promise<Chat> {
@@ -147,7 +147,7 @@ export async function start() {
   started = true;
 
   const [savedSettings, memories, chatList, marker, customModels] = await Promise.all([
-    store.settings(), loadMemories(), store.chatList(), store.loadMarker(), store.customModels(),
+    store.settings(), memoryStore.all(), store.chatList(), store.loadMarker(), store.customModels(),
   ]);
   let settings = savedSettings;
   // A marker left behind means the last load took the app down, most likely

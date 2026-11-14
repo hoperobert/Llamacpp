@@ -58,14 +58,15 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   restart themselves after an app update, and ask before using mobile data.
 - **Thinking** can be switched on from the message box, and the reasoning is
   folded away under the reply.
-- **Memories** (stored in SQLite) and **custom instructions** carry across
-  chats.
+- **Memories** and **custom instructions** carry across chats.
+- **Storage** is a SQLite database on the device, so searching chats does not
+  mean reading them all into memory.
 - **Replies** can be copied, shared, read aloud or asked for again. A message
   typed while one is being written is queued and sent when it finishes.
 
 It uses the system's own navigation bars, sheets, menus and SF Symbols, and
 Liquid Glass for the message box on iOS 26 and later. The look is warm and
-quiet: a paper-like palette with black and white for emphasis.
+quiet: a paper-like palette with a blue accent.
 
 ## Being a good citizen on the phone
 
@@ -84,7 +85,7 @@ npx expo start --web
 ```
 
 This shows the interface with a stand-in model and pretend downloads
-(`src/lib/engine.web.ts`, `src/lib/downloads.web.ts`). It is for checking
+(`engine.web.ts`, `downloads.web.ts` and `db.web.ts` in `src/lib`). It is for checking
 layout; system bars, menus and Liquid Glass only appear on an iPhone.
 
 ## Dory support
@@ -108,8 +109,8 @@ script and that setting.
 | `src/lib/downloads.ts` | Background model downloads that survive the app closing. |
 | `src/lib/logic.ts` | Prompt building, context compaction, titles and memories. |
 | `src/lib/models.ts` | The model catalogue and how well each suits a device. |
-| `src/lib/storage.ts` | Chats and settings saved on the device. |
-| `src/lib/memories.ts` | Memories, kept in a SQLite database. |
+| `src/lib/db.ts` | The SQLite database: chats, messages and memories. |
+| `src/lib/storage.ts` | Settings and other small preferences. |
 | `src/ui/` | Shared pieces: messages, the message box, lists, Markdown, icons. |
 
 ## Checks

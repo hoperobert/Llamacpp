@@ -1,6 +1,8 @@
-// Everything the app remembers, stored on the device.
+// The shapes of what the app remembers, and the small preferences kept in
+// key-value storage. Chats and memories are in the database (db.ts).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { chatStore } from './db';
 import type { Model } from './models';
 
 export type Message = {
@@ -85,10 +87,6 @@ const write = (key: string, value: unknown) =>
 
 export const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 
-const meta = (chat: Chat): ChatMeta => ({
-  id: chat.id, title: chat.title, updatedAt: chat.updatedAt, pinned: chat.pinned,
-});
-
 export const store = {
   async settings(): Promise<Settings> {
     return { ...DEFAULT_SETTINGS, ...(await read<Partial<Settings>>('settings', {})) };
@@ -102,44 +100,8 @@ export const store = {
   pausedDownloads: () => read<string[]>('pausedDownloads', []),
   savePausedDownloads: (ids: string[]) => write('pausedDownloads', ids),
 
-  chatList: () => read<ChatMeta[]>('chats', []),
-  chat: (id: string) => read<Chat | null>(`chat:${id}`, null),
-
-  async saveChat(chat: Chat): Promise<ChatMeta[]> {
-    await write(`chat:${chat.id}`, chat);
-    const list = (await store.chatList()).filter((c) => c.id !== chat.id);
-    list.unshift(meta(chat));
-    await write('chats', list);
-    return list;
-  },
-
-  /** Changes a chat's title or pin without moving it to the top of the list. */
-  async updateChat(id: string, patch: Partial<Pick<Chat, 'title' | 'titled' | 'pinned'>>): Promise<ChatMeta[]> {
-    const chat = await store.chat(id);
-    if (chat) await write(`chat:${id}`, { ...chat, ...patch });
-    const list = (await store.chatList()).map((c) => (c.id === id ? { ...c, ...patch } : c));
-    await write('chats', list);
-    return list;
-  },
-
-  async deleteChat(id: string): Promise<ChatMeta[]> {
-    await AsyncStorage.removeItem(`chat:${id}`).catch(() => {});
-    const list = (await store.chatList()).filter((c) => c.id !== id);
-    await write('chats', list);
-    return list;
-  },
-
-  async deleteAllChats() {
-    const list = await store.chatList();
-    await AsyncStorage.multiRemove(list.map((c) => `chat:${c.id}`)).catch(() => {});
-    await write('chats', []);
-  },
-
-  async allChats(): Promise<Chat[]> {
-    const list = await store.chatList();
-    const chats = await Promise.all(list.map((c) => store.chat(c.id)));
-    return chats.filter((c): c is Chat => c !== null);
-  },
+  // Chats and their messages are in the database (db.ts).
+  ...chatStore,
 
   /** Marker written while a model is loading; still present at start means the load crashed the app. */
   loadMarker: () => read<{ modelId: string; nCtx: number } | null>('loading', null),
