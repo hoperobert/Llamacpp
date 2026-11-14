@@ -36,6 +36,12 @@
       ],
       "@kesha-antonov/react-native-background-downloader",
       "expo-build-properties"
-    ]
+    ],
+    "owner": "sunleaf",
+    "extra": {
+      "eas": {
+        "projectId": "78e63a85-401c-41e2-9642-8edcc22ddc79"
+      }
+    }
   }
 }
