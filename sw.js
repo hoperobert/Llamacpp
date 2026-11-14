@@ -1,6 +1,6 @@
 // Offline support. Bump VERSION whenever any file in SHELL changes, so
 // installed copies pick up the new files.
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = `pocket-llm-${VERSION}`;
 
 const SHELL = [

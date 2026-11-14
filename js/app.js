@@ -1,4 +1,4 @@
-import { Engine, MODELS } from './engine.js';
+import { Engine, MODELS, diagnostics } from './engine.js';
 import { store, newId } from './store.js';
 import { renderMarkdown } from './markdown.js';
 
@@ -10,6 +10,7 @@ const DEFAULTS = {
   nCtx: 4096,
   thinking: false,
   gpu: true,
+  loadMode: null,   // the load mode that last worked on this device
   memoryOn: true,
   autoMemory: true,
   autoSummary: true,
@@ -532,7 +533,7 @@ function renderHeader() {
   if (modelUi.loadingId) {
     chip.textContent = modelUi.text || 'Loading model…';
   } else if (engine.ready) {
-    const gpu = settings.gpu && navigator.gpu ? 'WebGPU' : 'CPU';
+    const gpu = engine.mode?.gpu ? 'WebGPU' : 'CPU';
     chip.textContent = `${engine.model.name} · ${gpu}${navigator.onLine ? '' : ' · Offline'}`;
   } else {
     chip.textContent = 'No model loaded · tap to choose';
@@ -610,7 +611,12 @@ function renderModels() {
           h('p', { class: 'progress-text' }, modelUi.text)
         );
       }
-      if (modelUi.errorId === m.id) row.append(h('p', { class: 'error' }, modelUi.error));
+      if (modelUi.errorId === m.id) {
+        row.append(
+          h('p', { class: 'error' }, modelUi.error),
+          h('button', { class: 'pill quiet', type: 'button', onclick: copyDiagnostics }, 'Copy diagnostics')
+        );
+      }
       return row;
     }));
   }
@@ -647,11 +653,18 @@ async function loadModel(model) {
 
   let lastPaint = 0;
   try {
-    await engine.load(model, settings, ({ loaded, total }) => {
-      modelUi.fraction = total ? loaded / total : 0;
-      modelUi.text = loaded >= total
-        ? 'Loading into memory…'
-        : `Downloading ${formatMB(loaded / 1e6)} of ${formatMB(total / 1e6)}`;
+    const mode = await engine.load(model, settings, (p) => {
+      modelUi.fraction = p.fraction;
+      if (p.phase === 'download') {
+        modelUi.text = p.loaded >= p.total
+          ? 'Loading into memory…'
+          : `Downloading ${formatMB(p.loaded / 1e6)} of ${formatMB(p.total / 1e6)}`;
+      } else {
+        const how = p.attempt > 1
+          ? ` (retrying ${p.mode.gpu ? 'with' : 'without'} GPU${p.mode.single ? ', one thread' : ''})`
+          : '';
+        modelUi.text = `Loading into memory… ${Math.round(p.fraction * 100)}%${how}`;
+      }
       if (performance.now() - lastPaint > 200) {
         lastPaint = performance.now();
         renderHeader();
@@ -659,6 +672,7 @@ async function loadModel(model) {
       }
     });
     settings.modelId = model.id;
+    settings.loadMode = mode;
     saveSettings();
   } catch (e) {
     console.error(e);
@@ -671,6 +685,17 @@ async function loadModel(model) {
   await refreshCached();
   renderAll();
   if (engine.ready && !$('settings').open) $('input').focus({ preventScroll: true });
+}
+
+async function copyDiagnostics() {
+  const text = diagnostics();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Diagnostics copied. Paste them into a message.');
+  } catch (e) {
+    // Clipboard can be blocked. Fall back to the share sheet.
+    try { await navigator.share({ text }); } catch (e2) { toast('Could not copy diagnostics.'); }
+  }
 }
 
 function explainLoadError(e, onDevice) {
@@ -748,7 +773,7 @@ function setupSettings() {
   bindSetting('setThinking', 'thinking', { type: 'checked' });
   bindSetting('setCtx', 'nCtx', { parse: Number, reload: true });
   bindSetting('setAutoSummary', 'autoSummary', { type: 'checked' });
-  bindSetting('setGpu', 'gpu', { type: 'checked', reload: true });
+  bindSetting('setGpu', 'gpu', { type: 'checked', reload: true, after: () => { settings.loadMode = null; } });
   bindSetting('setTheme', 'theme', { after: applyAppearance });
   bindSetting('setTextSize', 'textSize', { after: applyAppearance });
 
@@ -772,6 +797,7 @@ function setupSettings() {
     h('a', { href: url, download: `pocket-llm-${new Date().toISOString().slice(0, 10)}.json` }).click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   });
+  $('diagnosticsBtn').addEventListener('click', copyDiagnostics);
   $('deleteChatsBtn').addEventListener('click', async () => {
     if (!confirm('Delete every chat? This cannot be undone.')) return;
     chats = [];
@@ -894,6 +920,11 @@ function setupEvents() {
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   try {
+    // When an updated version takes over, reload so the page matches it.
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (hadController && !busy && !modelUi.loadingId) location.reload();
+    });
     await navigator.serviceWorker.register('sw.js');
     await navigator.serviceWorker.ready;
     // Hosts that cannot send the isolation headers get them from the service

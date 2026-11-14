@@ -1,7 +1,7 @@
 // Wraps wllama (llama.cpp compiled to WebAssembly): model download, loading
 // and text generation.
 
-import { Wllama, LoggerWithoutDebug } from '../vendor/wllama/index.js';
+import { Wllama } from '../vendor/wllama/index.js';
 
 export const MODELS = [
   {
@@ -34,10 +34,47 @@ if (customUrl) {
 
 const asset = (path) => new URL(path, document.baseURI).href;
 
+export const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// ---------- diagnostics log ----------
+
+const LOG_LIMIT = 400;
+const logLines = [];
+let lastActivity = performance.now();
+
+function record(level, args) {
+  lastActivity = performance.now();
+  const text = args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack || ''}` : String(a))).join(' ');
+  logLines.push(`${(performance.now() / 1000).toFixed(1)}s ${level} ${text.slice(0, 500)}`);
+  if (logLines.length > LOG_LIMIT) logLines.shift();
+}
+
+const logger = {
+  debug: (...args) => record('D', args),
+  log: (...args) => record('I', args),
+  warn: (...args) => { record('W', args); console.warn(...args); },
+  error: (...args) => { record('E', args); console.error(...args); },
+};
+
+/** A plain-text report for troubleshooting a device that will not load. */
+export function diagnostics() {
+  return [
+    `Pocket LLM diagnostics, ${new Date().toISOString()}`,
+    `Engine: ${Engine.version()}`,
+    `Browser: ${navigator.userAgent}`,
+    `Installed: ${navigator.standalone === true || matchMedia('(display-mode: standalone)').matches}`,
+    `Isolated: ${self.crossOriginIsolated} | WebGPU: ${!!navigator.gpu} | Cores: ${navigator.hardwareConcurrency}` +
+      ` | Memory hint: ${navigator.deviceMemory ?? 'n/a'} GB | Online: ${navigator.onLine}`,
+    '',
+    ...logLines,
+  ].join('\n');
+}
+
 function create() {
   const wllama = new Wllama(
     { default: asset('vendor/wllama/wasm/wllama.wasm') },
-    { logger: LoggerWithoutDebug, allowOffline: true, parallelDownloads: 3 }
+    { logger, allowOffline: true, parallelDownloads: 3 }
   );
   // Safari lacks two WebAssembly features the main build needs, so it gets
   // the compatibility build. Served from this site so it works offline.
@@ -48,9 +85,34 @@ function create() {
   return wllama;
 }
 
+// A load that shows no sign of life for this long is treated as hung.
+const STALL_MS = 45000;
+
+const modeLabel = (mode) =>
+  `${mode.gpu ? 'GPU' : 'CPU'}, ${mode.single ? 'one thread' : 'multi-thread'}`;
+
+/**
+ * Ways to load a model, most capable first. Some devices hang or crash on
+ * the faster ones (iOS in particular), so load() works down the list.
+ */
+function loadModes(wantGpu, preferred) {
+  const modes = [];
+  const gpu = wantGpu && !!navigator.gpu;
+  if (gpu && !isIOS) modes.push({ gpu: true, single: false });
+  if (gpu) modes.push({ gpu: true, single: true });
+  if (!isIOS) modes.push({ gpu: false, single: false });
+  modes.push({ gpu: false, single: true });
+  if (preferred) {
+    const i = modes.findIndex((m) => m.gpu === preferred.gpu && m.single === preferred.single);
+    if (i > 0) modes.unshift(...modes.splice(i, 1));
+  }
+  return modes;
+}
+
 export class Engine {
   wllama = null;
   model = null;
+  mode = null;
   nCtx = 0;
   threads = 0;
 
@@ -70,25 +132,87 @@ export class Engine {
     }
   }
 
-  async load(model, { nCtx, gpu }, onProgress) {
+  /**
+   * Downloads the model if needed, then loads it, falling back to safer
+   * modes if one fails or hangs. `onProgress` gets { phase, fraction, mode }.
+   * Resolves with the mode that worked.
+   */
+  async load(model, { nCtx, gpu, loadMode }, onProgress) {
     await this.unload();
     // Ask the browser not to evict the model when storage runs low.
     try { await navigator.storage?.persist?.(); } catch (e) { /* optional */ }
+
+    record('I', [`Loading ${model.name}, context ${nCtx}`]);
+    const stored = await create().modelManager.getModelOrDownload({ url: model.url }, {
+      progressCallback: ({ loaded, total }) =>
+        onProgress({ phase: 'download', fraction: total ? loaded / total : 0, loaded, total }),
+    });
+
+    const modes = loadModes(gpu, loadMode);
+    let lastError = null;
+    for (let i = 0; i < modes.length; i++) {
+      const mode = modes[i];
+      record('I', [`Attempt ${i + 1} of ${modes.length}: ${modeLabel(mode)}`]);
+      try {
+        await this.#loadWith(stored, mode, nCtx, (fraction) =>
+          onProgress({ phase: 'load', fraction, mode, attempt: i + 1 }));
+        this.model = model;
+        this.mode = mode;
+        this.nCtx = this.wllama.getLoadedContextInfo?.().n_ctx || nCtx;
+        this.threads = this.wllama.getNumThreads();
+        record('I', [`Loaded with ${modeLabel(mode)}, ${this.threads} thread(s)`]);
+        return mode;
+      } catch (e) {
+        lastError = e;
+        record('E', [`Attempt failed (${modeLabel(mode)}):`, e]);
+      }
+    }
+    throw lastError;
+  }
+
+  async #loadWith(stored, mode, nCtx, onFraction) {
     const wllama = create();
+    const blobs = await stored.open();
+    const total = blobs.reduce((n, b) => n + b.size, 0) || 1;
+    let read = 0;
+    // The engine reads the file in slices. Watching them gives real load
+    // progress and shows the load is still alive.
+    const watched = blobs.map((blob) => {
+      const slice = blob.slice;
+      blob.slice = function (start = 0, end = blob.size, ...rest) {
+        lastActivity = performance.now();
+        read += Math.max(0, Math.min(end, blob.size) - start);
+        onFraction(Math.min(0.99, read / total));
+        return slice.call(this, start, end, ...rest);
+      };
+      return blob;
+    });
+
+    lastActivity = performance.now();
+    let watchdog;
+    const stalled = new Promise((_, reject) => {
+      watchdog = setInterval(() => {
+        if (performance.now() - lastActivity > STALL_MS) {
+          reject(new Error(`No progress for ${STALL_MS / 1000} seconds`));
+        }
+      }, 2000);
+    });
     try {
-      await wllama.loadModelFromUrl(model.url, {
-        n_ctx: nCtx,
-        ...(gpu ? {} : { n_gpu_layers: 0 }),
-        progressCallback: onProgress,
-      });
+      await Promise.race([
+        wllama.loadModel(watched, {
+          n_ctx: nCtx,
+          ...(mode.gpu ? {} : { n_gpu_layers: 0 }),
+          ...(mode.single ? { n_threads: 1 } : {}),
+        }),
+        stalled,
+      ]);
+      this.wllama = wllama;
     } catch (e) {
       await wllama.exit().catch(() => {});
       throw e;
+    } finally {
+      clearInterval(watchdog);
     }
-    this.wllama = wllama;
-    this.model = model;
-    this.nCtx = wllama.getLoadedContextInfo?.().n_ctx || nCtx;
-    this.threads = wllama.getNumThreads();
   }
 
   async unload() {
