@@ -1,0 +1,238 @@
+// Downloads one model file into the browser's private file storage (OPFS).
+//
+// Unlike a plain fetch, this survives bad connections: it writes straight to
+// disk as data arrives, and after any failure it asks the server for only the
+// bytes still missing. A half-finished file is kept, so the download can also
+// continue after the app is closed or updated.
+//
+// The finished file is stored where wllama looks for cached models:
+//   cache/<key>                 the model
+//   cache/__metadata__<key>     written last, marks the file as complete
+// Resume state lives in downloads/<key>.json.
+
+const STALL_MS = 30000;        // no data for this long counts as a dropped connection
+const MAX_BACKOFF_MS = 30000;
+const FLUSH_BYTES = 16 * 1024 * 1024;
+
+let cancelled = false;
+let controller = null;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const fatal = (message) => Object.assign(new Error(message), { fatal: true });
+
+async function directory(name) {
+  const root = await navigator.storage.getDirectory();
+  return root.getDirectoryHandle(name, { create: true });
+}
+
+async function readJson(dir, name) {
+  try {
+    const file = await (await dir.getFileHandle(name)).getFile();
+    return JSON.parse(await file.text());
+  } catch (e) {
+    return null;
+  }
+}
+
+async function writeText(dir, name, text) {
+  const handle = await (await dir.getFileHandle(name, { create: true })).createSyncAccessHandle();
+  try {
+    handle.truncate(0);
+    handle.write(new TextEncoder().encode(text), { at: 0 });
+    handle.flush();
+  } finally {
+    handle.close();
+  }
+}
+
+function waitForConnection() {
+  return new Promise((resolve) => {
+    const done = () => { self.removeEventListener('online', done); resolve(); };
+    self.addEventListener('online', done);
+    setTimeout(done, 15000);   // the online event is not fully reliable, so also poll
+  });
+}
+
+/**
+ * One connection attempt. Appends to the file from `offset` and returns the
+ * new offset when the response ends, whether or not the file is complete.
+ */
+async function attempt(url, handle, offset, info, saveInfo) {
+  controller = new AbortController();
+  let timer;
+  const arm = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(), STALL_MS);
+  };
+
+  try {
+    arm();
+    const response = await fetch(url, {
+      headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+
+    if (response.status === 416) {
+      // Asked for bytes past the end: either the file is already complete or
+      // it changed on the server. Starting over is the safe answer.
+      handle.truncate(0);
+      info.total = 0;
+      return 0;
+    }
+    if ([401, 403, 404, 410].includes(response.status)) {
+      throw fatal(`The server refused the download (HTTP ${response.status}).`);
+    }
+    if (!response.ok || !response.body) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const length = parseInt(response.headers.get('content-length') || '0', 10);
+    const etag = response.headers.get('etag') || '';
+    let total = 0;
+
+    if (response.status === 206) {
+      const range = (response.headers.get('content-range') || '').match(/\/(\d+)$/);
+      total = range ? parseInt(range[1], 10) : (length ? offset + length : 0);
+      const changed = (info.total && total && info.total !== total) ||
+        (info.etag && etag && info.etag !== etag);
+      if (changed) {
+        // The file on the server is not the one we started on.
+        handle.truncate(0);
+        info.total = 0;
+        info.etag = '';
+        await response.body.cancel().catch(() => {});
+        return 0;
+      }
+    } else {
+      // The server ignored the range and is sending the whole file.
+      if (offset > 0) {
+        handle.truncate(0);
+        offset = 0;
+      }
+      total = length;
+    }
+
+    if (total !== info.total || (etag && etag !== info.etag)) {
+      info.total = total;
+      if (etag) info.etag = etag;
+      await saveInfo();
+    }
+
+    const reader = response.body.getReader();
+    let unflushed = 0;
+    let lastPost = 0;
+    postMessage({ type: 'progress', loaded: offset, total });
+    while (true) {
+      arm();
+      const { done, value } = await reader.read();
+      if (done) break;
+      handle.write(value, { at: offset });
+      offset += value.byteLength;
+      unflushed += value.byteLength;
+      if (unflushed >= FLUSH_BYTES) {
+        handle.flush();
+        unflushed = 0;
+      }
+      const now = Date.now();
+      if (now - lastPost > 150) {
+        lastPost = now;
+        postMessage({ type: 'progress', loaded: offset, total });
+      }
+    }
+    handle.flush();
+    if (!total) info.total = offset;   // no size given: the stream ending is the end
+    return offset;
+  } finally {
+    clearTimeout(timer);
+    try { handle.flush(); } catch (e) { /* closing anyway */ }
+  }
+}
+
+async function download({ url, key }) {
+  const cache = await directory('cache');
+  const state = await directory('downloads');
+  const stateName = `${key}.json`;
+
+  const fileHandle = await cache.getFileHandle(key, { create: true });
+  let handle;
+  try {
+    handle = await fileHandle.createSyncAccessHandle();
+  } catch (e) {
+    throw fatal('This model is already downloading in another tab or window.');
+  }
+
+  let info = (await readJson(state, stateName)) || {};
+  if (info.url !== url) info = { url, total: 0, etag: '' };
+  const saveInfo = () => writeText(state, stateName, JSON.stringify(info));
+
+  try {
+    let offset = handle.getSize();
+    let failures = 0;
+
+    while (!(info.total > 0 && offset === info.total)) {
+      if (cancelled) throw new DOMException('Paused', 'AbortError');
+      if (info.total > 0 && offset > info.total) {
+        handle.truncate(0);
+        offset = 0;
+      }
+      if (!navigator.onLine) {
+        postMessage({ type: 'status', state: 'waiting' });
+        await waitForConnection();
+        continue;
+      }
+
+      const before = offset;
+      try {
+        postMessage({ type: 'status', state: 'downloading' });
+        offset = await attempt(url, handle, offset, info, saveInfo);
+        if (offset > before) failures = 0;
+      } catch (e) {
+        if (cancelled) throw new DOMException('Paused', 'AbortError');
+        if (e.fatal) throw e;
+        offset = handle.getSize();
+        failures = offset > before ? 0 : failures + 1;
+        const wait = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(failures, 5));
+        postMessage({ type: 'status', state: 'retrying', detail: String(e.message || e), wait });
+        await sleep(wait);
+      }
+    }
+
+    // A model file always starts with the letters GGUF. Anything else means
+    // we saved an error page or a corrupted file.
+    const magic = new Uint8Array(4);
+    handle.read(magic, { at: 0 });
+    if (String.fromCharCode(...magic) !== 'GGUF') {
+      handle.truncate(0);
+      await state.removeEntry(stateName).catch(() => {});
+      throw fatal('The downloaded file is not a valid model.');
+    }
+  } finally {
+    try { handle.flush(); } catch (e) { /* closing anyway */ }
+    handle.close();
+  }
+
+  await writeText(cache, `__metadata__${key}`, JSON.stringify({
+    originalURL: url,
+    originalSize: info.total,
+    etag: (info.etag || '').replace(/[^A-Za-z0-9]/g, ''),
+  }));
+  await state.removeEntry(stateName).catch(() => {});
+  postMessage({ type: 'done', total: info.total });
+}
+
+self.onmessage = (event) => {
+  const message = event.data || {};
+  if (message.type === 'start') {
+    download(message).catch((e) => {
+      postMessage({
+        type: 'error',
+        aborted: e?.name === 'AbortError',
+        message: String(e?.message || e),
+      });
+    });
+  } else if (message.type === 'cancel') {
+    cancelled = true;
+    controller?.abort();
+  }
+};

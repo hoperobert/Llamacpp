@@ -10,6 +10,7 @@ const DEFAULTS = {
   nCtx: 4096,
   thinking: false,
   gpu: true,
+  pendingModelId: null,   // a download to resume when the app next opens
   loadMode: null,   // the load mode that last worked on this device
   memoryOn: true,
   autoMemory: true,
@@ -68,10 +69,11 @@ let memories = [];
 let chats = [];
 let chat = null;
 let cached = new Set();
+let partials = new Map();   // model id -> { loaded, total } for unfinished downloads
 let busy = false;
 let abortController = null;
 let reloadNeeded = false;
-const modelUi = { loadingId: null, fraction: 0, text: '', errorId: null, error: '' };
+const modelUi = { loadingId: null, phase: '', fraction: 0, text: '', errorId: null, error: '' };
 
 // ====================================================================
 // Helpers
@@ -576,19 +578,29 @@ function renderModels() {
       const onDevice = cached.has(m.url);
       const row = h('div', { class: `model${active ? ' active' : ''}` });
 
+      const partial = !onDevice && partials.get(m.id);
+      const partialPct = partial && partial.total
+        ? Math.min(99, Math.round((partial.loaded / partial.total) * 100)) : 0;
+
       const actions = h('div', { class: 'model-actions' });
+      if (loading && modelUi.phase === 'download') {
+        actions.append(h('button', {
+          class: 'pill quiet', type: 'button', onclick: () => engine.pauseDownload(),
+        }, 'Pause'));
+      }
       if (!loading && !active) {
         actions.append(h('button', {
           class: 'pill', type: 'button', disabled: !!modelUi.loadingId,
           onclick: () => loadModel(m),
-        }, onDevice ? 'Use' : 'Download'));
+        }, onDevice ? 'Use' : partial ? 'Resume' : 'Download'));
       }
-      if (!loading && onDevice) {
+      if (!loading && (onDevice || partial)) {
         actions.append(h('button', {
           class: 'pill quiet', type: 'button', 'aria-label': `Delete ${m.name}`,
           html: ICONS.trash,
           onclick: async () => {
-            if (!confirm(`Delete ${m.name} from this device?`)) return;
+            const what = onDevice ? m.name : `the unfinished download of ${m.name}`;
+            if (!confirm(`Delete ${what} from this device?`)) return;
             await engine.deleteModel(m).catch((e) => toast(friendlyError(e)));
             await refreshCached();
             renderAll();
@@ -596,20 +608,25 @@ function renderModels() {
         }));
       }
 
+      const state = active ? 'In use' : onDevice ? 'On device'
+        : partial && !loading ? `Paused at ${partialPct}%` : '';
       row.append(h('div', { class: 'model-top' },
         h('div', { class: 'model-text' },
           h('div', { class: 'model-name' }, m.name),
           h('div', { class: 'model-meta' }, (m.sizeMB ? `${formatMB(m.sizeMB)} · ` : '') + m.note),
-          (active || onDevice) && h('div', { class: 'model-state' }, active ? 'In use' : 'On device')
+          state && h('div', { class: 'model-state' }, state)
         ),
         actions
       ));
 
       if (loading) {
+        row.classList.add('loading');
         row.append(
           h('div', { class: 'bar' }, h('div', { style: `width:${Math.round(modelUi.fraction * 100)}%` })),
           h('p', { class: 'progress-text' }, modelUi.text)
         );
+      } else if (partial) {
+        row.append(h('div', { class: 'bar' }, h('div', { style: `width:${partialPct}%` })));
       }
       if (modelUi.errorId === m.id) {
         row.append(
@@ -639,6 +656,27 @@ function renderAll() {
 
 async function refreshCached() {
   cached = await engine.cachedUrls();
+  partials = new Map();
+  for (const m of MODELS) {
+    if (cached.has(m.url)) continue;
+    const partial = await engine.partial(m);
+    if (partial) partials.set(m.id, partial);
+  }
+}
+
+/** Updates progress in place. Rebuilding the rows would swallow button taps. */
+function paintProgress() {
+  renderHeader();
+  for (const row of document.querySelectorAll('.model.loading')) {
+    row.querySelector('.bar > div').style.width = `${Math.round(modelUi.fraction * 100)}%`;
+    row.querySelector('.progress-text').textContent = modelUi.text;
+  }
+}
+
+// Keeps the screen on during a download or load, where the browser allows
+// it. A locked phone suspends the app and stalls the download.
+async function holdWakeLock() {
+  try { return await navigator.wakeLock?.request('screen'); } catch (e) { return null; }
 }
 
 async function loadModel(model) {
@@ -646,39 +684,56 @@ async function loadModel(model) {
   if (busy) abortController?.abort();
   const onDevice = cached.has(model.url);
   Object.assign(modelUi, {
-    loadingId: model.id, fraction: 0, errorId: null, error: '',
+    loadingId: model.id, phase: onDevice ? 'load' : 'download', fraction: 0, errorId: null, error: '',
     text: onDevice ? 'Loading…' : 'Starting download…',
   });
   renderAll();
 
+  if (!onDevice) {
+    settings.pendingModelId = model.id;
+    saveSettings();
+  }
+  const wakeLock = await holdWakeLock();
   let lastPaint = 0;
   try {
     const mode = await engine.load(model, settings, (p) => {
+      const phaseChanged = modelUi.phase !== p.phase;
+      modelUi.phase = p.phase;
       modelUi.fraction = p.fraction;
       if (p.phase === 'download') {
-        modelUi.text = p.loaded >= p.total
-          ? 'Loading into memory…'
-          : `Downloading ${formatMB(p.loaded / 1e6)} of ${formatMB(p.total / 1e6)}`;
+        const amount = `${formatMB(p.loaded / 1e6)} of ${formatMB(p.total / 1e6)}`;
+        modelUi.text = p.state === 'waiting' ? `No connection. Waiting to resume at ${amount}…`
+          : p.state === 'retrying' ? `Connection dropped. Retrying from ${amount}…`
+          : `Downloading ${amount}`;
       } else {
         const how = p.attempt > 1
           ? ` (retrying ${p.mode.gpu ? 'with' : 'without'} GPU${p.mode.single ? ', one thread' : ''})`
           : '';
         modelUi.text = `Loading into memory… ${Math.round(p.fraction * 100)}%${how}`;
       }
-      if (performance.now() - lastPaint > 200) {
-        lastPaint = performance.now();
+      if (phaseChanged) {
         renderHeader();
         renderModels();
+      } else if (performance.now() - lastPaint > 200 || p.state !== 'downloading') {
+        lastPaint = performance.now();
+        paintProgress();
       }
     });
     settings.modelId = model.id;
     settings.loadMode = mode;
+    settings.pendingModelId = null;
     saveSettings();
   } catch (e) {
-    console.error(e);
-    modelUi.errorId = model.id;
-    modelUi.error = explainLoadError(e, onDevice);
+    settings.pendingModelId = null;
+    saveSettings();
+    if (e?.name !== 'AbortError') {
+      console.error(e);
+      modelUi.errorId = model.id;
+      modelUi.error = explainLoadError(e, onDevice);
+    }
   }
+  wakeLock?.release().catch(() => {});
+  modelUi.phase = '';
   modelUi.loadingId = null;
   reloadNeeded = false;
   chat.ctx = null;
@@ -975,8 +1030,11 @@ async function start() {
   registerServiceWorker();
 
   // Open ready to chat when the chosen model is already on the device.
+  // Otherwise pick up a download that was cut off last time.
   const preferred = MODELS.find((m) => m.id === settings.modelId);
-  if (preferred && cached.has(preferred.url)) loadModel(preferred);
+  const pending = MODELS.find((m) => m.id === settings.pendingModelId);
+  if (pending && !cached.has(pending.url)) loadModel(pending);
+  else if (preferred && cached.has(preferred.url)) loadModel(preferred);
 }
 
 start();

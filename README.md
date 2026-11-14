@@ -16,6 +16,9 @@ WebGPU support. The bundled engine is llama.cpp build `b12211`.
 - **Memories** are facts about you that carry across chats. They are saved
   automatically when you mention something about yourself, by typing
   `/remember ...`, or by adding them in Settings.
+- **Downloads** resume where they left off after a dropped connection, a
+  pause, or closing the app, and retry by themselves until they finish.
+  Models and the engine files are kept across app updates.
 - **Settings** cover the model, custom instructions, memory, reply length and
   creativity, thinking mode, context size, GPU use, theme, text size and data
   export or deletion.
@@ -66,9 +69,11 @@ Then open `http://localhost:8765/`.
 | `js/engine.js` | Model list, download, loading and generation through wllama. |
 | `js/store.js` | On-device storage (IndexedDB) for chats, memories and settings. |
 | `js/markdown.js` | Safe Markdown rendering for replies. |
+| `js/download-worker.js` | Resumable model downloader with automatic retry. |
 | `sw.js` | Service worker that caches the app for offline use. |
 | `vendor/wllama` | Main engine build. |
 | `vendor/wllama-compat` | Build for Safari, which lacks two WebAssembly features the main build needs. |
 
-When you change any app file, bump `VERSION` in `sw.js` so installed
-copies update.
+When you change any app file, bump `VERSION` in `sw.js` so installed copies
+update. Bump `ENGINE_VERSION` only when the files under `vendor/` change;
+otherwise updates reuse the engine files already on the device.

@@ -85,6 +85,23 @@ function create() {
   return wllama;
 }
 
+// ---------- model files on disk ----------
+
+/** The file name wllama uses for a cached URL: sha1(url) + "_" + file name. */
+async function fileKey(url) {
+  const hash = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(url));
+  const hex = [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex}_${url.split('/').pop()}`;
+}
+
+async function opfsDir(name) {
+  const root = await navigator.storage.getDirectory();
+  return root.getDirectoryHandle(name, { create: true });
+}
+
+// Models split into several files use wllama's own downloader.
+const isSplit = (url) => /-\d{5}-of-\d{5}\.gguf/.test(url);
+
 // A load that shows no sign of life for this long is treated as hung.
 const STALL_MS = 45000;
 
@@ -113,6 +130,7 @@ export class Engine {
   wllama = null;
   model = null;
   mode = null;
+  downloadWorker = null;
   nCtx = 0;
   threads = 0;
 
@@ -143,10 +161,19 @@ export class Engine {
     try { await navigator.storage?.persist?.(); } catch (e) { /* optional */ }
 
     record('I', [`Loading ${model.name}, context ${nCtx}`]);
-    const stored = await create().modelManager.getModelOrDownload({ url: model.url }, {
-      progressCallback: ({ loaded, total }) =>
-        onProgress({ phase: 'download', fraction: total ? loaded / total : 0, loaded, total }),
-    });
+    const manager = create().modelManager;
+    const find = async () => (await manager.getModels()).find((m) => m.url === model.url);
+    let stored = await find();
+    if (!stored && isSplit(model.url)) {
+      stored = await manager.downloadModel({ url: model.url }, {
+        progressCallback: ({ loaded, total }) =>
+          onProgress({ phase: 'download', fraction: total ? loaded / total : 0, loaded, total }),
+      });
+    } else if (!stored) {
+      await this.#download(model, onProgress);
+      stored = await find();
+      if (!stored) throw new Error('The download finished but the file could not be opened.');
+    }
 
     const modes = loadModes(gpu, loadMode);
     let lastError = null;
@@ -168,6 +195,72 @@ export class Engine {
       }
     }
     throw lastError;
+  }
+
+  /**
+   * Downloads a model with automatic retry and resume (see download-worker.js).
+   * Rejects with an AbortError when paused through pauseDownload().
+   */
+  #download(model, onProgress) {
+    return new Promise((resolve, reject) => {
+      const worker = new Worker(new URL('./download-worker.js', import.meta.url));
+      this.downloadWorker = worker;
+      const finish = (fn, value) => {
+        worker.terminate();
+        if (this.downloadWorker === worker) this.downloadWorker = null;
+        fn(value);
+      };
+      let last = { loaded: 0, total: (model.sizeMB || 0) * 1e6 };
+      worker.onmessage = ({ data }) => {
+        if (data.type === 'progress') {
+          last = { loaded: data.loaded, total: data.total || last.total };
+          onProgress({
+            phase: 'download', state: 'downloading', ...last,
+            fraction: last.total ? last.loaded / last.total : 0,
+          });
+        } else if (data.type === 'status') {
+          if (data.state !== 'downloading') record('W', [`Download ${data.state}: ${data.detail || ''}`]);
+          onProgress({
+            phase: 'download', state: data.state, ...last,
+            fraction: last.total ? last.loaded / last.total : 0,
+          });
+        } else if (data.type === 'done') {
+          record('I', ['Download complete']);
+          finish(resolve);
+        } else if (data.type === 'error') {
+          record(data.aborted ? 'I' : 'E', [`Download stopped: ${data.message}`]);
+          finish(reject, data.aborted
+            ? new DOMException('Download paused', 'AbortError')
+            : new Error(data.message));
+        }
+      };
+      worker.onerror = (event) => finish(reject, new Error(event.message || 'Download worker failed'));
+      fileKey(model.url).then((key) => worker.postMessage({ type: 'start', url: model.url, key }));
+    });
+  }
+
+  /** Stops a running download but keeps what has arrived, so it can resume. */
+  pauseDownload() {
+    this.downloadWorker?.postMessage({ type: 'cancel' });
+  }
+
+  /** Progress of an unfinished download, or null. `total` is 0 if unknown. */
+  async partial(model) {
+    try {
+      const key = await fileKey(model.url);
+      const cache = await opfsDir('cache');
+      const file = await (await cache.getFileHandle(key)).getFile();
+      const done = await cache.getFileHandle(`__metadata__${key}`).then(() => true, () => false);
+      if (done || !file.size) return null;
+      let total = 0;
+      try {
+        const info = await (await (await opfsDir('downloads')).getFileHandle(`${key}.json`)).getFile();
+        total = JSON.parse(await info.text()).total || 0;
+      } catch (e) { /* no resume record */ }
+      return { loaded: file.size, total: total || (model.sizeMB || 0) * 1e6 };
+    } catch (e) {
+      return null;
+    }
   }
 
   async #loadWith(stored, mode, nCtx, onFraction) {
@@ -221,14 +314,24 @@ export class Engine {
     this.model = null;
   }
 
+  /** Removes a model from the device, including any unfinished download. */
   async deleteModel(model) {
     if (this.model?.url === model.url) await this.unload();
-    const models = await (this.wllama || create()).modelManager.getModels({ includeInvalid: true });
-    for (const m of models) if (m.url === model.url) await m.remove();
+    this.pauseDownload();
+    const models = await create().modelManager.getModels({ includeInvalid: true });
+    for (const m of models) if (m.url === model.url) await m.remove().catch(() => {});
+    const key = await fileKey(model.url);
+    const cache = await opfsDir('cache');
+    await cache.removeEntry(key).catch(() => {});
+    await cache.removeEntry(`__metadata__${key}`).catch(() => {});
+    await (await opfsDir('downloads')).removeEntry(`${key}.json`).catch(() => {});
   }
 
   async deleteAllModels() {
     await this.unload();
+    this.pauseDownload();
+    const root = await navigator.storage.getDirectory();
+    await root.removeEntry('downloads', { recursive: true }).catch(() => {});
     await create().cacheManager.clear();
   }
 
