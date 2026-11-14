@@ -35,6 +35,14 @@ export const MODELS: Model[] = [
     url: 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf',
   },
   {
+    id: 'spark-x26-1.7b',
+    name: 'Spark-X2.6 1.7B',
+    note: 'Newer (Oct 2026). Strong for its size. Best on 8 GB iPhones.',
+    sizeMB: 1769,
+    file: 'Spark-X2.6-1.7B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/XHToken/Spark-X2.6-1.7B-GGUF/resolve/main/Spark-X2.6-1.7B-Q4_K_M.gguf',
+  },
+  {
     id: 'gemma4-e2b',
     name: 'Gemma 4 E2B',
     note: 'Smarter. Needs an iPhone with 8 GB of memory.',
@@ -45,10 +53,18 @@ export const MODELS: Model[] = [
   {
     id: 'qwen35-4b',
     name: 'Qwen3.5 4B',
-    note: 'Smartest here, slowest. Needs 8 GB of memory or more.',
+    note: 'Smarter, slower. Needs 8 GB of memory or more.',
     sizeMB: 3032,
     file: 'Qwen3.5-4B-Q4_K_M.gguf',
     url: 'https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf',
+  },
+  {
+    id: 'spark-x26-4b',
+    name: 'Spark-X2.6 4B',
+    note: 'Newer (Oct 2026). Its makers rate it near 9B models. Needs 8 GB of memory or more.',
+    sizeMB: 3543,
+    file: 'Spark-X2.6-4B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/XHToken/Spark-X2.6-4B-GGUF/resolve/main/Spark-X2.6-4B-Q4_K_M.gguf',
   },
   {
     id: 'gemma4-e4b',
@@ -61,10 +77,18 @@ export const MODELS: Model[] = [
   {
     id: 'qwen35-9b',
     name: 'Qwen3.5 9B',
-    note: 'The most capable here. Only for iPhones with 12 GB of memory, and slow.',
+    note: 'Very capable. Only for iPhones with 12 GB of memory, and slow.',
     sizeMB: 5379,
     file: 'Qwen3.5-9B-Q4_0.gguf',
     url: 'https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_0.gguf',
+  },
+  {
+    id: 'ornith15-9b',
+    name: 'Ornith 1.5 9B',
+    note: 'A tuned Qwen3.5 9B, much better at code. Only for iPhones with 12 GB of memory, and slow.',
+    sizeMB: 5780,
+    file: 'Ornith-1.5-9B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_K_M.gguf',
   },
 ];
 
