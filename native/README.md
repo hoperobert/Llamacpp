@@ -36,10 +36,13 @@ The first run asks you to sign in to your Apple account and sets up the
 signing certificates for you. When it finishes, the build appears in
 TestFlight; install the TestFlight app on the iPhone and open it from there.
 
-Expo can also build straight from GitHub with no computer at all: connect this
-repository in the project's settings on expo.dev and set the base directory to
-`native`. Apple credentials are then added on expo.dev using an App Store
-Connect API key.
+The first build has to be started this way, from a terminal, because it
+signs you in to Apple and creates the project and signing certificates. If you
+have no computer, a GitHub Codespace (a terminal in the browser, opened from
+the repository's **Code** button) works for these commands.
+
+After that first build, Expo can build straight from GitHub: link the
+repository on expo.dev and set the base directory to `native`.
 
 ## Status
 
