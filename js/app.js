@@ -901,7 +901,7 @@ function applyAppearance() {
   root.setAttribute('data-text', settings.textSize);
   const dark = settings.theme === 'dark' ||
     (settings.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.querySelector('meta[name="theme-color"]').content = dark ? '#151613' : '#f6f5f1';
+  document.querySelector('meta[name="theme-color"]').content = dark ? '#212121' : '#ffffff';
 }
 
 async function openSettings() {

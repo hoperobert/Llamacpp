@@ -8,7 +8,7 @@
 // touched by updates.
 
 // Bump when any file in SHELL changes.
-const VERSION = 'v7';
+const VERSION = 'v8';
 // Bump only when the files under vendor/ change.
 const ENGINE_VERSION = 'wllama-3.13.0';
 

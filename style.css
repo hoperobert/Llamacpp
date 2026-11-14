@@ -1,30 +1,30 @@
 :root {
-  --bg: #f6f5f1;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --sunken: #eceae3;
-  --text: #1c1d1a;
-  --muted: #6a6c64;
-  --line: #dddcd4;
-  --accent: #2f6b4f;
+  --sunken: #f4f4f4;
+  --text: #0d0d0d;
+  --muted: #6e6e6e;
+  --line: #e3e3e3;
+  --accent: #0d0d0d;
   --accent-text: #ffffff;
-  --user: #e1ece5;
-  --danger: #a3271f;
-  --warn: #9a6200;
+  --user: #f1f1f1;
+  --danger: #c62828;
+  --warn: #a15c00;
   --shadow: 0 8px 30px rgba(20, 22, 18, 0.14);
   --text-size: 16px;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #151613;
-    --surface: #1f201c;
-    --sunken: #0f100e;
-    --text: #ecece6;
-    --muted: #9c9e94;
-    --line: #33352f;
-    --accent: #6fbf97;
-    --accent-text: #0f1a14;
-    --user: #24332b;
+    --bg: #212121;
+    --surface: #2f2f2f;
+    --sunken: #171717;
+    --text: #ececec;
+    --muted: #a3a3a3;
+    --line: #3d3d3d;
+    --accent: #ffffff;
+    --accent-text: #0d0d0d;
+    --user: #303030;
     --danger: #ff8a80;
     --warn: #e2b04a;
     --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
@@ -32,15 +32,15 @@
   }
 }
 :root[data-theme="dark"] {
-  --bg: #151613;
-  --surface: #1f201c;
-  --sunken: #0f100e;
-  --text: #ecece6;
-  --muted: #9c9e94;
-  --line: #33352f;
-  --accent: #6fbf97;
-  --accent-text: #0f1a14;
-  --user: #24332b;
+  --bg: #212121;
+  --surface: #2f2f2f;
+  --sunken: #171717;
+  --text: #ececec;
+  --muted: #a3a3a3;
+  --line: #3d3d3d;
+  --accent: #ffffff;
+  --accent-text: #0d0d0d;
+  --user: #303030;
   --danger: #ff8a80;
   --warn: #e2b04a;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
@@ -733,3 +733,9 @@ dialog[open] { animation: rise 0.2s ease-out; }
 
 .note.warn { margin: 0 0 20px; border-color: var(--warn); }
 .note.warn .text-btn { display: block; padding: 6px 0 0; }
+
+/* monochrome theme: keep the switch knob visible on a white track */
+input[role="switch"]:checked::after { background: var(--accent-text); }
+.bubble a { text-decoration: underline; text-underline-offset: 2px; }
+.model.active { border-color: var(--text); }
+.msg.user .bubble { border-radius: 20px; }
