@@ -739,3 +739,5 @@ input[role="switch"]:checked::after { background: var(--accent-text); }
 .bubble a { text-decoration: underline; text-underline-offset: 2px; }
 .model.active { border-color: var(--text); }
 .msg.user .bubble { border-radius: 20px; }
+
+.model .progress-hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); }

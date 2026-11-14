@@ -17,7 +17,13 @@ const FLUSH_BYTES = 16 * 1024 * 1024;
 let cancelled = false;
 let controller = null;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+let lastDataAt = 0;
+let wake = null;   // cuts a retry wait short
+
+const sleep = (ms) => new Promise((resolve) => {
+  const timer = setTimeout(resolve, ms);
+  wake = () => { clearTimeout(timer); resolve(); };
+});
 const fatal = (message) => Object.assign(new Error(message), { fatal: true });
 
 async function directory(name) {
@@ -48,6 +54,7 @@ async function writeText(dir, name, text) {
 function waitForConnection() {
   return new Promise((resolve) => {
     const done = () => { self.removeEventListener('online', done); resolve(); };
+    wake = done;
     self.addEventListener('online', done);
     setTimeout(done, 15000);   // the online event is not fully reliable, so also poll
   });
@@ -61,6 +68,7 @@ async function attempt(url, handle, offset, info, saveInfo) {
   controller = new AbortController();
   let timer;
   const arm = () => {
+    lastDataAt = Date.now();
     clearTimeout(timer);
     timer = setTimeout(() => controller.abort(), STALL_MS);
   };
@@ -231,6 +239,12 @@ self.onmessage = (event) => {
         message: String(e?.message || e),
       });
     });
+  } else if (message.type === 'nudge') {
+    // The app came back to the foreground. Phones suspend the page in the
+    // background, which leaves a dead connection behind, so if nothing has
+    // arrived for a moment, drop it and reconnect now instead of waiting.
+    if (Date.now() - lastDataAt > 3000) controller?.abort();
+    wake?.();
   } else if (message.type === 'cancel') {
     cancelled = true;
     controller?.abort();

@@ -74,6 +74,7 @@ let partials = new Map();   // model id -> { loaded, total } for unfinished down
 let busy = false;
 let abortController = null;
 let reloadNeeded = false;
+let activeWakeLock = null;
 const modelUi = { loadingId: null, phase: '', fraction: 0, text: '', errorId: null, error: '' };
 
 // ====================================================================
@@ -746,7 +747,9 @@ function renderModels() {
         row.classList.add('loading');
         row.append(
           h('div', { class: 'bar' }, h('div', { style: `width:${Math.round(modelUi.fraction * 100)}%` })),
-          h('p', { class: 'progress-text' }, modelUi.text)
+          h('p', { class: 'progress-text' }, modelUi.text),
+          modelUi.phase === 'download' && isIOS && h('p', { class: 'progress-hint' },
+            'Keep this screen open. iPhone pauses downloads in the background; it carries on where it left off when you come back.')
         );
       } else if (partial) {
         row.append(h('div', { class: 'bar' }, h('div', { style: `width:${partialPct}%` })));
@@ -816,7 +819,7 @@ async function loadModel(model) {
     settings.pendingModelId = model.id;
     saveSettings();
   }
-  const wakeLock = await holdWakeLock();
+  activeWakeLock = await holdWakeLock();
   let lastPaint = 0;
   try {
     const mode = await engine.load(model, settings, (p) => {
@@ -855,7 +858,8 @@ async function loadModel(model) {
       modelUi.error = explainLoadError(e, onDevice);
     }
   }
-  wakeLock?.release().catch(() => {});
+  activeWakeLock?.release().catch(() => {});
+  activeWakeLock = null;
   modelUi.phase = '';
   modelUi.loadingId = null;
   reloadNeeded = false;
@@ -1108,6 +1112,14 @@ function setupEvents() {
     dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
   }
 
+  // Phones pause the app in the background. Pick the download straight back
+  // up on return, and take the screen wake lock again (it is dropped on hide).
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || !modelUi.loadingId) return;
+    engine.nudgeDownload();
+    activeWakeLock = await holdWakeLock();
+  });
+  addEventListener('online', () => engine.nudgeDownload());
   addEventListener('online', renderHeader);
   addEventListener('offline', renderHeader);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyAppearance);

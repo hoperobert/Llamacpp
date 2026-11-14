@@ -285,6 +285,11 @@ export class Engine {
     });
   }
 
+  /** Call when the app returns to the foreground: reconnects a stalled download at once. */
+  nudgeDownload() {
+    this.downloadWorker?.postMessage({ type: 'nudge' });
+  }
+
   /** Stops a running download but keeps what has arrived, so it can resume. */
   pauseDownload() {
     this.downloadWorker?.postMessage({ type: 'cancel' });
