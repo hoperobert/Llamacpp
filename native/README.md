@@ -23,27 +23,29 @@ It runs llama.cpp natively on the GPU (Metal) through
 
 ## Build and install
 
-No computer or terminal is needed. Everything happens in Safari on the iPhone.
-
-1. Open [Expo Launch for this app](https://launch.dev/?github=https://github.com/hoperobert/Llamacpp/tree/main/native&appBundleId=com.hoperobert.pocketllm&appName=Pocket+LLM&projectName=Pocket+LLM).
-2. Sign in with Expo, choose **Launch to App Store**, and sign in to your
-   Apple account when asked. Launch creates the signing certificates.
-3. When the build finishes, Apple emails a TestFlight invite. Install the
-   TestFlight app and open Pocket LLM from there.
-
-Launch does not notice new commits. To ship an update, open the link again.
-
-### If Launch does not work
-
-Use a terminal in the browser instead. On GitHub, open the repository, tap
-**Code → Codespaces → Create codespace**, then run:
+The app is already set up on Expo and in App Store Connect, so a new build is
+one command from the `native` folder. No Mac is needed, and a GitHub
+Codespace works as the terminal.
 
 ```sh
-./build-ios.sh
+npx eas-cli@latest build --platform ios --profile production --auto-submit
 ```
 
-It asks you to sign in to Expo and Apple, sets up signing, builds in Expo's
-cloud and sends the build to TestFlight.
+Expo compiles the app in its cloud and sends it to TestFlight. Apple takes a
+few minutes to process it, then it appears in the TestFlight app.
+
+Signing in is either `npx eas-cli@latest login`, or an Expo access token in
+the `EXPO_TOKEN` environment variable.
+
+### Setting it up from scratch
+
+For a different Expo or Apple account, remove `owner` and `extra.eas` from
+`app.json` and `ascAppId` from `eas.json`, then either:
+
+- open [Expo Launch](https://launch.dev) in a browser and give it this
+  repository, which does the whole first build with no terminal; or
+- run `./build-ios.sh` in a terminal, which signs you in to Expo and Apple and
+  creates the signing certificates.
 
 ## What it does
 
