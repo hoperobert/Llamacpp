@@ -127,6 +127,12 @@ script and that setting.
 
 ```sh
 npm run typecheck
+npm test
 npx expo lint
 npx expo-doctor
 ```
+
+`npm test` runs the app's real database and download code under Node, with
+stand-ins for the phone-only modules (`tests/mocks`). It covers the one-time
+import of older chats and memories, search, projects, and a download whose
+saved link has expired.
