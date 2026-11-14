@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Pocket LLM</title>
+<meta name="description" content="A chat model that runs entirely on this device, offline.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f6f5f1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pocket LLM">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <button id="menuBtn" class="icon" type="button" aria-label="Chats">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    </button>
+    <div class="heading">
+      <div id="chatTitle">New chat</div>
+      <button id="modelChip" type="button"></button>
+    </div>
+    <button id="ctxBtn" class="ctx" type="button" aria-label="Context used" hidden>
+      <svg viewBox="0 0 36 36" aria-hidden="true">
+        <circle class="track" cx="18" cy="18" r="15"/>
+        <circle id="ctxRing" class="fill" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="0 100"/>
+      </svg>
+      <span id="ctxPct">0</span>
+    </button>
+    <button id="newBtn" class="icon" type="button" aria-label="New chat">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </header>
+
+  <main id="scroll">
+    <div class="column">
+      <section id="onboard" hidden>
+        <h2>Pick a model</h2>
+        <p class="muted">It downloads once, then runs on this device. Nothing you type leaves it.</p>
+        <div id="onboardModels" class="models"></div>
+        <p id="installHint" class="note" hidden>
+          To keep it working offline, tap <strong>Share</strong> then
+          <strong>Add to Home Screen</strong>, and open it from there.
+        </p>
+      </section>
+
+      <section id="empty" hidden>
+        <h2 id="greeting">What's on your mind?</h2>
+        <div id="suggestions" class="chips"></div>
+      </section>
+
+      <div id="messages" aria-live="polite"></div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="column">
+      <p id="status" aria-live="polite"></p>
+      <form id="form">
+        <textarea id="input" rows="1" placeholder="Message" autocomplete="off" enterkeyhint="send"></textarea>
+        <button id="send" type="submit" aria-label="Send" disabled>
+          <svg class="i-send" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+        </button>
+      </form>
+    </div>
+  </footer>
+</div>
+
+<div id="scrim" hidden></div>
+
+<aside id="drawer" aria-label="Chats" inert>
+  <div class="drawer-head">
+    <strong>Chats</strong>
+    <button id="drawerClose" class="icon" type="button" aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div id="chatList"></div>
+  <div class="drawer-foot">
+    <button id="settingsBtn" class="row-btn" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+      Settings
+    </button>
+  </div>
+</aside>
+
+<dialog id="settings" aria-label="Settings">
+  <div class="sheet-head">
+    <strong>Settings</strong>
+    <button id="settingsDone" class="text-btn" type="button">Done</button>
+  </div>
+  <div class="sheet-body">
+
+    <section>
+      <h3>Model</h3>
+      <div id="settingsModels" class="models"></div>
+    </section>
+
+    <section>
+      <h3>Custom instructions</h3>
+      <textarea id="setInstructions" rows="3" placeholder="How should it respond? For example: Be brief. Use British English."></textarea>
+    </section>
+
+    <section>
+      <h3>Memory</h3>
+      <label class="switch-row">
+        <span>Use memories<small>Share saved facts with every chat.</small></span>
+        <input id="setMemoryOn" type="checkbox" role="switch">
+      </label>
+      <label class="switch-row">
+        <span>Save memories automatically<small>Picks up facts you mention about yourself.</small></span>
+        <input id="setAutoMemory" type="checkbox" role="switch">
+      </label>
+      <ul id="memoryList" class="memories"></ul>
+      <form id="memoryForm" class="inline-form">
+        <input id="memoryInput" type="text" placeholder="Add a memory, e.g. I'm vegetarian" autocomplete="off">
+        <button class="text-btn" type="submit">Add</button>
+      </form>
+    </section>
+
+    <section>
+      <h3>Replies</h3>
+      <label class="field">
+        <span>Creativity <output id="outTemperature"></output></span>
+        <input id="setTemperature" type="range" min="0" max="1.5" step="0.1">
+      </label>
+      <label class="field">
+        <span>Longest reply</span>
+        <select id="setMaxTokens">
+          <option value="256">Short</option>
+          <option value="768">Medium</option>
+          <option value="1536">Long</option>
+        </select>
+      </label>
+      <label class="switch-row">
+        <span>Think before answering<small>Better on hard questions, slower.</small></span>
+        <input id="setThinking" type="checkbox" role="switch">
+      </label>
+    </section>
+
+    <section>
+      <h3>Context</h3>
+      <label class="field">
+        <span>Context size</span>
+        <select id="setCtx">
+          <option value="2048">Small (uses least memory)</option>
+          <option value="4096">Medium</option>
+          <option value="8192">Large (may crash on phones)</option>
+        </select>
+      </label>
+      <label class="switch-row">
+        <span>Summarise long chats<small>Keeps the gist when a chat outgrows the context. Off: old messages are dropped.</small></span>
+        <input id="setAutoSummary" type="checkbox" role="switch">
+      </label>
+      <label class="switch-row">
+        <span>Use the GPU<small>Turn off if replies are garbled or the app crashes.</small></span>
+        <input id="setGpu" type="checkbox" role="switch">
+      </label>
+    </section>
+
+    <section>
+      <h3>Appearance</h3>
+      <label class="field">
+        <span>Theme</span>
+        <select id="setTheme">
+          <option value="auto">Match device</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Text size</span>
+        <select id="setTextSize">
+          <option value="s">Small</option>
+          <option value="m">Medium</option>
+          <option value="l">Large</option>
+        </select>
+      </label>
+    </section>
+
+    <section>
+      <h3>Data</h3>
+      <p id="storageInfo" class="muted small"></p>
+      <button id="exportBtn" class="row-btn" type="button">Export chats and memories</button>
+      <button id="deleteChatsBtn" class="row-btn danger" type="button">Delete all chats</button>
+      <button id="deleteMemoriesBtn" class="row-btn danger" type="button">Delete all memories</button>
+      <button id="deleteModelsBtn" class="row-btn danger" type="button">Delete downloaded models</button>
+    </section>
+
+    <p id="about" class="muted small"></p>
+  </div>
+</dialog>
+
+<dialog id="ctxDialog" class="card" aria-label="Context">
+  <strong>Context</strong>
+  <p id="ctxText"></p>
+  <p class="muted small">The model can only hold this much of a chat at once. When it fills up, older messages are summarised or dropped.</p>
+  <div class="card-actions">
+    <button id="ctxCompact" class="text-btn" type="button">Summarise now</button>
+    <button id="ctxClose" class="text-btn strong" type="button">Close</button>
+  </div>
+</dialog>
+
+<div id="toast" role="status" hidden>
+  <span id="toastText"></span>
+  <button id="toastAction" class="text-btn" type="button" hidden></button>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
