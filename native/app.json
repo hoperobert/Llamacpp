@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "Pocket LLM",
+    "slug": "pocket-llm",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hoperobert.pocketllm",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.hoperobert.pocketllm",
+      "adaptiveIcon": {
+        "backgroundColor": "#0d0d0d",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      [
+        "llama.rn",
+        {
+          "enableEntitlements": true,
+          "entitlementsProfile": [
+            "production",
+            "preview"
+          ],
+          "forceCxx20": true,
+          "enableOpenCLAndHexagon": true
+        }
+      ],
+      "@kesha-antonov/react-native-background-downloader",
+      "expo-build-properties"
+    ]
+  }
+}

@@ -7,6 +7,9 @@ It uses [wllama](https://github.com/ngxson/wllama) 3.13.0, which is
 [llama.cpp](https://github.com/ggml-org/llama.cpp) compiled to WebAssembly with
 WebGPU support. The bundled engine is llama.cpp build `b12211`.
 
+There is also a native iPhone app in [`native/`](native/README.md), which adds
+true background downloads and room for bigger models.
+
 ## Features
 
 - **Chats** are saved on the device and listed in the side menu.
