@@ -35,6 +35,14 @@ export const MODELS: Model[] = [
     url: 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf',
   },
   {
+    id: 'qwen38-2b-distill',
+    name: 'Qwen3.8 2B (distilled)',
+    note: 'Third-party. Qwen3.5 2B retrained on Qwen3.8 answers. Always thinks first, so replies start slower.',
+    sizeMB: 1312,
+    file: 'Qwen3.8-2B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/empero-ai/Qwen3.8-2B-Distill-GGUF/resolve/main/Qwen3.8-2B-Q4_K_M.gguf',
+  },
+  {
     id: 'spark-x26-1.7b',
     name: 'Spark-X2.6 1.7B',
     note: 'Newer (Oct 2026). Strong for its size. Best on 8 GB iPhones.',
@@ -57,6 +65,14 @@ export const MODELS: Model[] = [
     sizeMB: 3032,
     file: 'Qwen3.5-4B-Q4_K_M.gguf',
     url: 'https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf',
+  },
+  {
+    id: 'qwen38-4b-distill',
+    name: 'Qwen3.8 4B (distilled)',
+    note: 'Third-party. Qwen3.5 4B retrained on Qwen3.8 answers. Always thinks first. Needs 8 GB of memory or more.',
+    sizeMB: 2783,
+    file: 'Qwen3.8-4B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/empero-ai/Qwen3.8-4B-Distill-GGUF/resolve/main/Qwen3.8-4B-Q4_K_M.gguf',
   },
   {
     id: 'spark-x26-4b',
