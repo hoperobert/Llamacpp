@@ -136,7 +136,10 @@ function buildRows(
       ? summarised ? 'Earlier messages were summarised' : 'Earlier messages are out of context'
       : undefined,
   }));
-  if (live) rows.push({ key: live.id ?? 'live', message: live, streaming: true });
+  // For an instant after a reply finishes it is both saved and still "live". Show it once.
+  if (live && !messages.some((m) => m.id && m.id === live.id)) {
+    rows.push({ key: live.id ?? 'live', message: live, streaming: true });
+  }
   return rows.reverse();
 }
 
