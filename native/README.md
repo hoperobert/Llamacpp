@@ -23,25 +23,27 @@ It runs llama.cpp natively on the GPU (Metal) through
 
 ## Build and install
 
-From a terminal, in the repository's top folder:
+No computer or terminal is needed. Everything happens in Safari on the iPhone.
+
+1. Open [Expo Launch for this app](https://launch.dev/?github=https://github.com/hoperobert/Llamacpp/tree/claude/magical-darwin-7ddbmk/native&appBundleId=com.hoperobert.pocketllm&appName=Pocket+LLM&projectName=Pocket+LLM).
+2. Sign in with Expo, choose **Launch to App Store**, and sign in to your
+   Apple account when asked. Launch creates the signing certificates.
+3. When the build finishes, Apple emails a TestFlight invite. Install the
+   TestFlight app and open Pocket LLM from there.
+
+Launch does not notice new commits. To ship an update, open the link again.
+
+### If Launch does not work
+
+Use a terminal in the browser instead. On GitHub, open the repository, tap
+**Code → Codespaces → Create codespace**, then run:
 
 ```sh
 ./build-ios.sh
 ```
 
-No computer is needed. On GitHub, open the repository, tap **Code →
-Codespaces → Create codespace**. That opens a terminal in the browser with
-everything installed, and the command above works there.
-
-The first run asks you to sign in to your Apple account and sets up the
-signing certificates for you. When it finishes, the build appears in
-TestFlight; install the TestFlight app on the iPhone and open it from there.
-
-The first build has to be started this way, from a terminal, because it
-signs you in to Apple and creates the project and signing certificates.
-
-After that first build, Expo can build straight from GitHub: link the
-repository on expo.dev and set the base directory to `native`.
+It asks you to sign in to Expo and Apple, sets up signing, builds in Expo's
+cloud and sends the build to TestFlight.
 
 ## Status
 
