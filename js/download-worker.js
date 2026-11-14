@@ -12,7 +12,7 @@
 
 const STALL_MS = 30000;        // no data for this long counts as a dropped connection
 const MAX_BACKOFF_MS = 30000;
-const FLUSH_BYTES = 16 * 1024 * 1024;
+const FLUSH_BYTES = 4 * 1024 * 1024;   // how much could be lost if the app is killed
 
 let cancelled = false;
 let controller = null;
@@ -25,6 +25,8 @@ const sleep = (ms) => new Promise((resolve) => {
   wake = () => { clearTimeout(timer); resolve(); };
 });
 const fatal = (message) => Object.assign(new Error(message), { fatal: true });
+// Lines for the diagnostics log.
+const note = (text) => postMessage({ type: 'note', text });
 
 async function directory(name) {
   const root = await navigator.storage.getDirectory();
@@ -72,18 +74,38 @@ async function attempt(url, handle, offset, info, saveInfo) {
     clearTimeout(timer);
     timer = setTimeout(() => controller.abort(), STALL_MS);
   };
+  const request = (target) => fetch(target, {
+    headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
+    signal: controller.signal,
+    cache: 'no-store',
+  });
 
   try {
     arm();
-    const response = await fetch(url, {
-      headers: offset > 0 ? { Range: `bytes=${offset}-` } : {},
-      signal: controller.signal,
-      cache: 'no-store',
-    });
+    let response = await request(url);
+
+    // The model URL redirects to a download server. Some browsers drop the
+    // Range header when following that redirect, which makes the server send
+    // the whole file again. If that happened, ask the download server
+    // directly: it honours the range.
+    if (offset > 0 && response.status === 200 && response.url && response.url !== url) {
+      const direct = response.url;
+      await response.body?.cancel().catch(() => {});
+      arm();
+      const retried = await request(direct).catch(() => null);
+      if (retried && (retried.status === 206 || retried.status === 200)) {
+        response = retried;
+      } else {
+        await retried?.body?.cancel().catch(() => {});
+        arm();
+        response = await request(url);
+      }
+    }
+    note(`resume at ${offset}: HTTP ${response.status}`);
 
     if (response.status === 416) {
-      // Asked for bytes past the end: either the file is already complete or
-      // it changed on the server. Starting over is the safe answer.
+      // Asked for bytes past the end, so the saved part is longer than the
+      // file. Only then is starting over the right answer.
       handle.truncate(0);
       info.total = 0;
       return 0;
@@ -96,34 +118,39 @@ async function attempt(url, handle, offset, info, saveInfo) {
     }
 
     const length = parseInt(response.headers.get('content-length') || '0', 10);
-    const etag = response.headers.get('etag') || '';
     let total = 0;
+    // Bytes to throw away before writing. Used when the server insists on
+    // sending the file from the start: the saved part is kept and the
+    // repeated beginning is skipped, so progress never goes backwards.
+    let skip = 0;
 
     if (response.status === 206) {
       const range = (response.headers.get('content-range') || '').match(/\/(\d+)$/);
       total = range ? parseInt(range[1], 10) : (length ? offset + length : 0);
-      const changed = (info.total && total && info.total !== total) ||
-        (info.etag && etag && info.etag !== etag);
-      if (changed) {
-        // The file on the server is not the one we started on.
+      if (info.total && total && info.total !== total) {
+        // A different size means a different file on the server.
+        note(`size changed from ${info.total} to ${total}, starting over`);
         handle.truncate(0);
         info.total = 0;
-        info.etag = '';
         await response.body.cancel().catch(() => {});
         return 0;
       }
     } else {
-      // The server ignored the range and is sending the whole file.
-      if (offset > 0) {
-        handle.truncate(0);
-        offset = 0;
-      }
       total = length;
+      if (offset > 0) {
+        if (info.total && total && info.total !== total) {
+          note(`size changed from ${info.total} to ${total}, starting over`);
+          handle.truncate(0);
+          offset = 0;
+        } else {
+          note(`range ignored, skipping the first ${offset} bytes`);
+          skip = offset;
+        }
+      }
     }
 
-    if (total !== info.total || (etag && etag !== info.etag)) {
+    if (total && total !== info.total) {
       info.total = total;
-      if (etag) info.etag = etag;
       await saveInfo();
     }
 
@@ -133,8 +160,16 @@ async function attempt(url, handle, offset, info, saveInfo) {
     postMessage({ type: 'progress', loaded: offset, total });
     while (true) {
       arm();
-      const { done, value } = await reader.read();
+      let { done, value } = await reader.read();
       if (done) break;
+      if (skip > 0) {
+        if (value.byteLength <= skip) {
+          skip -= value.byteLength;
+          continue;
+        }
+        value = value.subarray(skip);
+        skip = 0;
+      }
       handle.write(value, { at: offset });
       offset += value.byteLength;
       unflushed += value.byteLength;
@@ -149,7 +184,7 @@ async function attempt(url, handle, offset, info, saveInfo) {
       }
     }
     handle.flush();
-    if (!total) info.total = offset;   // no size given: the stream ending is the end
+    if (!total && skip === 0) info.total = offset;   // no size given: the stream ending is the end
     return offset;
   } finally {
     clearTimeout(timer);
@@ -177,6 +212,7 @@ async function download({ url, key }) {
   try {
     let offset = handle.getSize();
     let failures = 0;
+    note(`starting with ${offset} bytes already saved, expected total ${info.total || 'unknown'}`);
 
     while (!(info.total > 0 && offset === info.total)) {
       if (cancelled) throw new DOMException('Paused', 'AbortError');

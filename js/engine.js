@@ -264,6 +264,8 @@ export class Engine {
             phase: 'download', state: 'downloading', ...last,
             fraction: last.total ? last.loaded / last.total : 0,
           });
+        } else if (data.type === 'note') {
+          record('I', [`Download: ${data.text}`]);
         } else if (data.type === 'status') {
           if (data.state !== 'downloading') record('W', [`Download ${data.state}: ${data.detail || ''}`]);
           onProgress({
