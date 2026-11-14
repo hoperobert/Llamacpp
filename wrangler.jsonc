@@ -1,8 +1,0 @@
-{
-  // Cloudflare Workers config: serves the ./public folder as a static site.
-  "name": "pocket-llm",
-  "compatibility_date": "2026-11-01",
-  "assets": {
-    "directory": "./public"
-  }
-}

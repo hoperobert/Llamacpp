@@ -1,6 +1,6 @@
 // Offline support. Bump VERSION whenever any file in SHELL changes, so
 // installed copies pick up the new files.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = `pocket-llm-${VERSION}`;
 
 const SHELL = [
@@ -40,9 +40,8 @@ self.addEventListener('activate', (event) => {
 });
 
 // These headers make the page "cross-origin isolated", which browsers
-// require before they allow multi-threaded WebAssembly. Cloudflare sends them
-// (see _headers), and adding them here keeps offline loads and other hosts
-// working the same way.
+// require before they allow multi-threaded WebAssembly. Static hosts such as
+// GitHub Pages cannot set them, so the service worker adds them.
 function isolate(response) {
   if (!response || response.status === 0) return response;
   const headers = new Headers(response.headers);

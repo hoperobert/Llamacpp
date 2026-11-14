@@ -30,25 +30,16 @@ WebGPU support. The bundled engine is llama.cpp build `b12211`.
 To try another model, add `?model=<url of a .gguf file>` to the page address.
 Single files must be under 2 GB.
 
-## Deploy to Cloudflare
+## Put it online (GitHub Pages)
 
-The site is the `public/` folder. There is no build step.
+The site is the repository root. There is no build step.
 
-**From the dashboard (deploys on every push)**
+1. On GitHub, open **Settings → Pages**.
+2. Under **Source**, choose **Deploy from a branch**.
+3. Pick the branch and the `/ (root)` folder, then save.
+4. The app appears at `https://<user>.github.io/<repo>/` after a minute or two.
 
-1. In Cloudflare, open **Workers & Pages → Create → Import a repository**.
-2. Pick this repository and branch.
-3. Leave the build command empty and keep the deploy command as
-   `npx wrangler deploy`. The settings come from `wrangler.jsonc`.
-
-**From a terminal**
-
-```sh
-npx wrangler deploy
-```
-
-`public/_headers` sets the headers that browsers require for multi-threaded
-WebAssembly.
+It redeploys on every push to that branch.
 
 ## Install on iPhone
 
@@ -62,7 +53,7 @@ week without visits, which would remove the downloaded model.
 ## Run it locally
 
 ```sh
-cd public && python3 -m http.server 8765
+python3 -m http.server 8765
 ```
 
 Then open `http://localhost:8765/`.
@@ -71,13 +62,13 @@ Then open `http://localhost:8765/`.
 
 | File | Purpose |
 |---|---|
-| `public/js/app.js` | Interface, context handling, memories, settings. |
-| `public/js/engine.js` | Model list, download, loading and generation through wllama. |
-| `public/js/store.js` | On-device storage (IndexedDB) for chats, memories and settings. |
-| `public/js/markdown.js` | Safe Markdown rendering for replies. |
-| `public/sw.js` | Service worker that caches the app for offline use. |
-| `public/vendor/wllama` | Main engine build. |
-| `public/vendor/wllama-compat` | Build for Safari, which lacks two WebAssembly features the main build needs. |
+| `js/app.js` | Interface, context handling, memories, settings. |
+| `js/engine.js` | Model list, download, loading and generation through wllama. |
+| `js/store.js` | On-device storage (IndexedDB) for chats, memories and settings. |
+| `js/markdown.js` | Safe Markdown rendering for replies. |
+| `sw.js` | Service worker that caches the app for offline use. |
+| `vendor/wllama` | Main engine build. |
+| `vendor/wllama-compat` | Build for Safari, which lacks two WebAssembly features the main build needs. |
 
-When you change any app file, bump `VERSION` in `public/sw.js` so installed
+When you change any app file, bump `VERSION` in `sw.js` so installed
 copies update.
