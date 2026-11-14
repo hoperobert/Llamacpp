@@ -114,6 +114,31 @@ export const MODELS: Model[] = [
     file: 'Ornith-1.5-9B-Q4_K_M.gguf',
     url: 'https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_K_M.gguf',
   },
+  // Abliterated: community edits with the refusal behaviour removed.
+  {
+    id: 'lfm3-1.7b-uncensored',
+    name: 'LFM3 1.7B (abliterated)',
+    note: 'Does not refuse requests. Fast. Third-party edit of LFM3.',
+    sizeMB: 1132,
+    file: 'LFM3-1.7B-Uncensored-AD-Q4_K_M.gguf',
+    url: 'https://huggingface.co/AtomicChat/LFM3-1.7B-Uncensored-GGUF/resolve/main/LFM3-1.7B-Uncensored-AD-Q4_K_M.gguf',
+  },
+  {
+    id: 'qwen35-4b-uncensored',
+    name: 'Qwen3.5 4B (abliterated)',
+    note: 'Does not refuse requests. The most popular edit of Qwen3.5 4B. Needs 8 GB of memory or more.',
+    sizeMB: 2707,
+    file: 'Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf',
+    url: 'https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive/resolve/main/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf',
+  },
+  {
+    id: 'spark-x26-4b-abliterated',
+    name: 'Spark-X2.6 4B (abliterated)',
+    note: 'Does not refuse requests. Third-party edit of Spark-X2.6 4B. Needs 8 GB of memory or more.',
+    sizeMB: 2600,
+    file: 'Spark-X2.6-4B-abliterated-Q4_K_M.gguf',
+    url: 'https://huggingface.co/FrostWolfAI/Spark-X2.6-4B-abliterated-GGUF/resolve/main/Spark-X2.6-4B-abliterated-Q4_K_M.gguf',
+  },
 ];
 
 export const formatMB = (mb: number) =>
