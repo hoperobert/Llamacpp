@@ -82,7 +82,7 @@ function Actions({ t, message, canRetry }: Props) {
       <Action t={t} icon="square.and.arrow.up" label="Share" onPress={() => shareText(message.content)} />
       {canRetry && <Action t={t} icon="arrow.clockwise" label="Try again" onPress={regenerate} />}
       {!!message.speed && (
-        <Text style={[styles.speed, { color: t.c.tertiary }]}>{message.speed.toFixed(1)} tokens/s</Text>
+        <Text style={[styles.speed, { color: t.c.tertiary }]}>{message.speed.toFixed(0)} tok/s</Text>
       )}
     </View>
   );
@@ -110,7 +110,7 @@ function Thinking({ t, message, streaming }: { t: Theme; message: Message; strea
   const thinkingNow = streaming && !message.content;
   const label = thinkingNow
     ? 'Thinking…'
-    : message.thought ? `Thought for ${message.thought} second${message.thought === 1 ? '' : 's'}` : 'Thought it through';
+    : message.thought ? `Thought for ${message.thought}s` : 'Thought';
   // While it thinks, show where the thought has got to rather than where it began.
   const shown = thinkingNow ? reasoning.slice(-260).replace(/^\S*\s/, '…') : reasoning;
   return (
@@ -123,7 +123,6 @@ function Thinking({ t, message, streaming }: { t: Theme; message: Message; strea
         accessibilityRole="button"
         accessibilityLabel={`${label}. ${open ? 'Hide' : 'Show'} reasoning`}
       >
-        <Icon name="lightbulb" size={15} color={t.c.secondary} />
         <Text style={[styles.thinkingLabel, { color: t.c.secondary }]}>{label}</Text>
         {!thinkingNow && <Icon name={open ? 'chevron.up' : 'chevron.down'} size={11} color={t.c.tertiary} weight="semibold" />}
       </Pressable>
@@ -156,7 +155,7 @@ function Dots({ t }: { t: Theme }) {
           key={i}
           style={[
             styles.dot,
-            { backgroundColor: t.c.secondary },
+            { backgroundColor: t.c.accent },
             { opacity: phase.interpolate({ inputRange: [i, i + 0.5, i + 1, 3], outputRange: [0.25, 1, 0.25, 0.25], extrapolate: 'clamp' }) },
           ]}
         />
@@ -170,8 +169,8 @@ const styles = StyleSheet.create({
   divider: { textAlign: 'center', fontSize: 12, marginBottom: 16 },
   userRow: { alignItems: 'flex-end' },
   bubble: {
-    maxWidth: '84%', borderRadius: 22, borderCurve: 'continuous',
-    paddingHorizontal: 15, paddingVertical: 10,
+    maxWidth: '84%', borderRadius: 18, borderCurve: 'continuous',
+    paddingHorizontal: 14, paddingVertical: 9,
   },
   assistant: { gap: 10 },
   note: { fontSize: 13 },

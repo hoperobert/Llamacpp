@@ -50,7 +50,7 @@ export const ModelRow = React.memo(function ModelRow({ t, model, onUsed }: {
   } else if (dl?.status === 'paused') {
     detail = dl.loaded > 0 ? `Paused at ${Math.round(progress * 100)}%` : 'Paused';
   } else if (loadingThis) {
-    detail = `Loading into memory… ${Math.round(fraction * 100)}%`;
+    detail = `Loading ${Math.round(fraction * 100)}%`;
   }
 
   return (
@@ -58,8 +58,9 @@ export const ModelRow = React.memo(function ModelRow({ t, model, onUsed }: {
       <View style={styles.top}>
         <View style={styles.flex}>
           <Text style={[styles.name, { color: t.c.text }]}>{model.name}</Text>
-          <Text style={[styles.meta, { color: t.c.secondary }]}>
-            {model.sizeMB ? `${formatMB(model.sizeMB)} · ` : ''}{model.note}
+          <Text numberOfLines={1} style={[styles.meta, { color: suits === 'tight' ? t.c.warn : t.c.secondary }]}>
+            {[model.sizeMB ? formatMB(model.sizeMB) : '', suits === 'tight' ? 'Tight fit' : model.note]
+              .filter(Boolean).join(' · ')}
           </Text>
         </View>
 
@@ -89,21 +90,8 @@ export const ModelRow = React.memo(function ModelRow({ t, model, onUsed }: {
         )}
       </View>
 
-      {suits !== 'good' && !active && (
-        <View style={styles.fit}>
-          <Icon
-            name={suits === 'no' ? 'xmark.circle.fill' : 'exclamationmark.triangle.fill'}
-            size={13}
-            color={suits === 'no' ? t.c.danger : t.c.warn}
-          />
-          <Text style={[styles.fitText, { color: suits === 'no' ? t.c.danger : t.c.warn }]}>
-            {suits === 'no' ? 'Too big for this iPhone' : 'A tight fit. May be slow or close the app'}
-          </Text>
-        </View>
-      )}
-
       {(dl || loadingThis) && (
-        <View style={[styles.bar, { backgroundColor: t.c.dark ? '#3a3a3c' : '#e5e5ea' }]}>
+        <View style={[styles.bar, { backgroundColor: t.c.line }]}>
           <View
             style={[
               styles.barFill,
@@ -132,7 +120,7 @@ function Pill({ t, label, onPress, filled, disabled }: {
       accessibilityRole="button"
       style={({ pressed }) => [
         styles.pill,
-        { backgroundColor: filled ? t.c.accent : t.c.dark ? '#2c2c2e' : '#ececf0' },
+        { backgroundColor: filled ? t.c.accent : t.c.fill },
         (pressed || disabled) && styles.dim,
       ]}
     >
@@ -150,7 +138,7 @@ function Circle({ t, icon, label, onPress }: {
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.circle, { backgroundColor: t.c.dark ? '#2c2c2e' : '#ececf0' }, pressed && styles.dim]}
+      style={({ pressed }) => [styles.circle, { backgroundColor: t.c.fill }, pressed && styles.dim]}
     >
       <Icon name={icon} size={14} color={t.c.text} />
     </Pressable>
@@ -162,15 +150,13 @@ const styles = StyleSheet.create({
   row: { paddingHorizontal: 16, paddingVertical: 13, gap: 8 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   name: { fontSize: 17, fontWeight: '600' },
-  meta: { fontSize: 14, lineHeight: 19, marginTop: 2 },
+  meta: { fontSize: 14, marginTop: 2 },
   pill: { minWidth: 68, height: 32, borderRadius: 16, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
   pillText: { fontSize: 15, fontWeight: '600' },
   circle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   more: { width: 28, height: 32, alignItems: 'center', justifyContent: 'center' },
   inUse: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   inUseText: { fontSize: 15, fontWeight: '600' },
-  fit: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  fitText: { fontSize: 13 },
   bar: { height: 4, borderRadius: 2, overflow: 'hidden' },
   barFill: { height: '100%', borderRadius: 2 },
   detail: { fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },

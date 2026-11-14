@@ -95,9 +95,6 @@ export const store = {
   },
   saveSettings: (settings: Settings) => write('settings', settings),
 
-  memories: () => read<Memory[]>('memories', []),
-  saveMemories: (memories: Memory[]) => write('memories', memories),
-
   customModels: () => read<Model[]>('customModels', []),
   saveCustomModels: (models: Model[]) => write('customModels', models),
 

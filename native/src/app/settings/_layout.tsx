@@ -15,7 +15,7 @@ export default function SettingsLayout() {
     >
       <Stack.Screen name="index" options={{ title: 'Settings' }} />
       <Stack.Screen name="memory" options={{ title: 'Memory' }} />
-      <Stack.Screen name="instructions" options={{ title: 'Custom Instructions' }} />
+      <Stack.Screen name="instructions" options={{ title: 'Instructions' }} />
     </Stack>
   );
 }

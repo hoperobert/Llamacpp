@@ -29,7 +29,10 @@ export default function RootLayout() {
       <StatusBar style={t.c.dark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerTintColor: t.c.text, headerShadowVisible: false }}>
         <Stack.Screen name="index" options={{ title: '', headerTransparent: true }} />
-        <Stack.Screen name="chats" options={{ title: 'Chats', presentation: 'modal' }} />
+        <Stack.Screen
+          name="chats"
+          options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}
+        />
         <Stack.Screen name="models" options={{ title: 'Models', presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'modal' }} />
       </Stack>

@@ -68,7 +68,13 @@ export function SwitchRow({ t, title, subtitle, value, onChange }: {
       t={t}
       title={title}
       subtitle={subtitle}
-      right={<Switch value={value} onValueChange={(v) => { haptic('select'); onChange(v); }} />}
+      right={
+        <Switch
+          value={value}
+          trackColor={{ true: t.c.accent }}
+          onValueChange={(v) => { haptic('select'); onChange(v); }}
+        />
+      }
     />
   );
 }
@@ -95,7 +101,7 @@ export function Segmented<T extends string | number>({ t, value, options, onChan
   t: Theme; value: T; options: { label: string; value: T }[]; onChange: (value: T) => void;
 }) {
   return (
-    <View style={[styles.segments, { backgroundColor: t.c.dark ? '#2c2c2e' : '#e9e9ee' }]}>
+    <View style={[styles.segments, { backgroundColor: t.c.fill }]}>
       {options.map((o) => {
         const selected = o.value === value;
         return (
@@ -106,7 +112,7 @@ export function Segmented<T extends string | number>({ t, value, options, onChan
             onPress={() => { if (!selected) { haptic('select'); onChange(o.value); } }}
             style={[
               styles.segment,
-              selected && [styles.segmentOn, { backgroundColor: t.c.dark ? '#636366' : '#ffffff' }],
+              selected && [styles.segmentOn, { backgroundColor: t.c.dark ? '#5a5955' : '#ffffff' }],
             ]}
           >
             <Text

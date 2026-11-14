@@ -25,26 +25,17 @@ export default function MemoryScreen() {
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
     >
-      <Section
-        t={t}
-        footer="You can also type /remember followed by a fact in any chat."
-      >
-        <SwitchRow
-          t={t} title="Use Memories" subtitle="Share saved facts with every chat."
-          value={settings.memoryOn} onChange={(memoryOn) => changeSettings({ memoryOn })}
-        />
-        <SwitchRow
-          t={t} title="Save Automatically" subtitle="Picks up facts you mention about yourself."
-          value={settings.autoMemory} onChange={(autoMemory) => changeSettings({ autoMemory })}
-        />
+      <Section t={t}>
+        <SwitchRow t={t} title="Use memories" value={settings.memoryOn} onChange={(memoryOn) => changeSettings({ memoryOn })} />
+        <SwitchRow t={t} title="Save automatically" value={settings.autoMemory} onChange={(autoMemory) => changeSettings({ autoMemory })} />
       </Section>
 
-      <Section t={t} title="Add a Memory">
+      <Section t={t}>
         <View style={styles.addRow}>
           <TextInput
             value={draft}
             onChangeText={setDraft}
-            placeholder="For example: I'm vegetarian"
+            placeholder="Add a memory"
             placeholderTextColor={t.c.tertiary}
             returnKeyType="done"
             onSubmitEditing={add}
@@ -74,19 +65,16 @@ export default function MemoryScreen() {
             </View>
           ))}
         </Section>
-      ) : (
-        <Text style={[styles.empty, { color: t.c.secondary }]}>Nothing saved yet.</Text>
-      )}
+      ) : null}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { padding: 16, gap: 26, paddingBottom: 48 },
+  body: { padding: 16, gap: 24, paddingBottom: 48 },
   addRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 16, paddingRight: 10, minHeight: 50 },
   input: { flex: 1, fontSize: 17, paddingVertical: 12 },
   add: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   memory: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 50 },
   memoryText: { flex: 1, fontSize: 17, lineHeight: 22 },
-  empty: { fontSize: 15, textAlign: 'center' },
 });

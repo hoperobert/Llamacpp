@@ -1,50 +1,53 @@
-// Colours and type sizes. The palette follows the iOS system greys, with a
-// black and white accent, so the app sits naturally next to Apple's own.
+// Colours and type. A warm, paper-like palette with one clay accent, and a
+// serif face for headings and replies.
 
 import { useMemo } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 import { app } from '../lib/app';
 
 const light = {
   dark: false,
-  bg: '#ffffff',
-  /** Background of settings-style screens. */
-  grouped: '#f2f2f7',
-  /** Rows and cards on a grouped background. */
+  bg: '#faf9f5',
+  /** Background of settings-style screens and the side menu. */
+  grouped: '#f3f1e9',
+  /** Rows and cards on a grouped background, and the message box. */
   card: '#ffffff',
-  /** Quiet filled areas: the message box, code blocks, the user's bubble. */
-  fill: '#f0f0f3',
-  text: '#000000',
-  secondary: '#6e6e73',
-  tertiary: '#aeaeb2',
-  line: '#d9d9de',
-  accent: '#000000',
+  /** Quiet filled areas: the user's bubble, code blocks, buttons. */
+  fill: '#efede4',
+  text: '#1a1915',
+  secondary: '#6f6d64',
+  tertiary: '#a9a69b',
+  line: '#e2dfd3',
+  accent: '#c96442',
   onAccent: '#ffffff',
-  danger: '#ff3b30',
-  good: '#248a3d',
-  warn: '#b25000',
+  danger: '#b3261e',
+  good: '#3f7d4e',
+  warn: '#a8620b',
 };
 
 const dark: Palette = {
   dark: true,
-  bg: '#000000',
-  grouped: '#000000',
-  card: '#1c1c1e',
-  fill: '#1c1c1e',
-  text: '#ffffff',
-  secondary: '#98989f',
-  tertiary: '#636366',
-  line: '#38383a',
-  accent: '#ffffff',
-  onAccent: '#000000',
-  danger: '#ff453a',
-  good: '#30d158',
-  warn: '#ff9f0a',
+  bg: '#262624',
+  grouped: '#1f1e1d',
+  card: '#30302e',
+  fill: '#3a3a37',
+  text: '#f5f4ee',
+  secondary: '#a8a59c',
+  tertiary: '#76746d',
+  line: '#43423f',
+  accent: '#d97757',
+  onAccent: '#ffffff',
+  danger: '#f2776b',
+  good: '#7fbf8e',
+  warn: '#e0a458',
 };
 
 export type Palette = typeof light;
 
 const SIZES = { small: 15, medium: 17, large: 19 } as const;
+
+/** The system serif (New York) on iOS. */
+export const serif = Platform.select({ ios: 'ui-serif', default: 'Georgia' });
 
 export type Theme = { c: Palette; size: number };
 

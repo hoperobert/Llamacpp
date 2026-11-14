@@ -7,8 +7,7 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import {
-  app, changeSettings, contextUse, findModel, newChat, removeChat, renameChat, send, shareChat,
-  summariseNow, togglePin,
+  app, contextUse, findModel, newChat, removeChat, renameChat, send, shareChat, summariseNow, togglePin,
 } from '../lib/app';
 import { ramMB } from '../lib/device';
 import { recommended } from '../lib/models';
@@ -19,13 +18,13 @@ import { Icon, type IconName } from '../ui/Icon';
 import { MessageRow } from '../ui/Message';
 import { ModelRow } from '../ui/ModelRow';
 import { Toast } from '../ui/Toast';
-import { useTheme, type Theme } from '../ui/theme';
+import { serif, useTheme, type Theme } from '../ui/theme';
 
 const SUGGESTIONS: { icon: IconName; title: string; prompt: string }[] = [
-  { icon: 'graduationcap', title: 'Explain something', prompt: 'Explain how vaccines work in simple terms' },
-  { icon: 'envelope', title: 'Write a message', prompt: 'Write a friendly text to reschedule dinner' },
-  { icon: 'list.bullet.clipboard', title: 'Make a plan', prompt: 'Give me a 3-day plan to learn the basics of chess' },
-  { icon: 'fork.knife', title: 'Plan a meal', prompt: 'Suggest a quick dinner I can make with eggs, rice and spinach' },
+  { icon: 'graduationcap', title: 'Explain', prompt: 'Explain how vaccines work in simple terms' },
+  { icon: 'pencil', title: 'Write', prompt: 'Write a friendly text to reschedule dinner' },
+  { icon: 'list.bullet.clipboard', title: 'Plan', prompt: 'Give me a 3-day plan to learn the basics of chess' },
+  { icon: 'fork.knife', title: 'Cook', prompt: 'Suggest a quick dinner I can make with eggs, rice and spinach' },
 ];
 
 export default function ChatScreen() {
@@ -66,7 +65,7 @@ export default function ChatScreen() {
         <View style={styles.flex}>
         {!hydrated ? null : empty ? (
           <ScrollView
-            contentContainerStyle={[styles.emptyBody, { paddingTop: headerHeight + 24, paddingBottom: composerHeight + 16 }]}
+            contentContainerStyle={[styles.emptyBody, { paddingTop: headerHeight, paddingBottom: composerHeight + 8 }]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
@@ -163,7 +162,6 @@ function TopFade({ t, height }: { t: Theme; height: number }) {
 }
 
 function Header() {
-  const t = useTheme();
   const router = useRouter();
   const chat = app.use((s) => s.chat);
   const settings = app.use((s) => s.settings);
@@ -178,9 +176,7 @@ function Header() {
     const canCompact = ready && !busy && chat.messages.length - chat.cut > 2;
     Alert.alert(
       `Context ${percent}% full`,
-      `About ${used.toLocaleString()} of ${settings.nCtx.toLocaleString()} tokens used.\n\n` +
-        'A model can only hold this much of a chat at once. When it fills up, older messages are ' +
-        (settings.autoSummary ? 'summarised.' : 'dropped.'),
+      `${used.toLocaleString()} of ${settings.nCtx.toLocaleString()} tokens used.`,
       [
         ...(canCompact
           ? [{ text: settings.autoSummary ? 'Summarise Now' : 'Drop Old Messages', onPress: summariseNow }]
@@ -197,48 +193,33 @@ function Header() {
 
   return (
     <>
-      <Stack.Screen options={{ headerTitle: () => <ModelTitle t={t} /> }} />
+      <Stack.Screen options={{ title: hasMessages ? chat.title : '' }} />
       <Stack.Toolbar placement="left">
         <Stack.Toolbar.Button
-          icon="line.3.horizontal"
+          icon="sidebar.left"
           accessibilityLabel="Chats"
           onPress={() => router.push('/chats')}
         />
       </Stack.Toolbar>
       <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="More">
-          <Stack.Toolbar.MenuAction
-            icon="lightbulb"
-            isOn={settings.thinking}
-            subtitle="Slower, better on hard questions"
-            onPress={() => changeSettings({ thinking: !settings.thinking })}
-          >
-            Think Before Answering
-          </Stack.Toolbar.MenuAction>
-          <Stack.Toolbar.MenuAction icon="gauge.with.dots.needle.33percent" hidden={!hasMessages} onPress={showContext}>
+        <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="More" hidden={!hasMessages}>
+          <Stack.Toolbar.MenuAction icon="gauge.with.dots.needle.33percent" onPress={showContext}>
             {`Context ${percent}% Full`}
           </Stack.Toolbar.MenuAction>
           <Stack.Toolbar.Menu inline>
-            <Stack.Toolbar.MenuAction icon="square.and.arrow.up" hidden={!hasMessages} onPress={() => shareChat(chat.id)}>
-              Share Chat
+            <Stack.Toolbar.MenuAction icon="square.and.arrow.up" onPress={() => shareChat(chat.id)}>
+              Share
             </Stack.Toolbar.MenuAction>
-            <Stack.Toolbar.MenuAction icon="pencil" hidden={!hasMessages} onPress={rename}>
+            <Stack.Toolbar.MenuAction icon="pencil" onPress={rename}>
               Rename
             </Stack.Toolbar.MenuAction>
-            <Stack.Toolbar.MenuAction
-              icon={chat.pinned ? 'pin.slash' : 'pin'}
-              hidden={!hasMessages}
-              onPress={() => togglePin(chat)}
-            >
+            <Stack.Toolbar.MenuAction icon={chat.pinned ? 'pin.slash' : 'pin'} onPress={() => togglePin(chat)}>
               {chat.pinned ? 'Unpin' : 'Pin'}
             </Stack.Toolbar.MenuAction>
-            <Stack.Toolbar.MenuAction icon="trash" destructive hidden={!hasMessages} onPress={() => removeChat(chat)}>
-              Delete Chat
+            <Stack.Toolbar.MenuAction icon="trash" destructive onPress={() => removeChat(chat)}>
+              Delete
             </Stack.Toolbar.MenuAction>
           </Stack.Toolbar.Menu>
-          <Stack.Toolbar.MenuAction icon="gearshape" onPress={() => router.push('/settings')}>
-            Settings
-          </Stack.Toolbar.MenuAction>
         </Stack.Toolbar.Menu>
         <Stack.Toolbar.Button
           icon="square.and.pencil"
@@ -251,28 +232,6 @@ function Header() {
   );
 }
 
-/** The model's name in the middle of the header. Tapping it opens the model list. */
-function ModelTitle({ t }: { t: Theme }) {
-  const router = useRouter();
-  const state = app.use((s) => s.engine);
-  const model = findModel(state.modelId);
-  const label = state.status === 'loading'
-    ? `Loading ${Math.round(state.fraction * 100)}%`
-    : state.status === 'ready' && model ? model.name : 'Choose a Model';
-  return (
-    <Pressable
-      onPress={() => router.push('/models')}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={`${label}. Change model`}
-      style={({ pressed }) => [styles.title, pressed && styles.dim]}
-    >
-      <Text numberOfLines={1} style={[styles.titleText, { color: t.c.text }]}>{label}</Text>
-      <Icon name="chevron.down" size={11} color={t.c.secondary} weight="bold" />
-    </Pressable>
-  );
-}
-
 // ---------- empty states ----------
 
 function Greeting({ t }: { t: Theme }) {
@@ -280,32 +239,26 @@ function Greeting({ t }: { t: Theme }) {
   const hour = new Date().getHours();
   const greeting = hour < 5 ? 'Up late?' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   return (
-    <View style={styles.greeting}>
+    <View style={styles.centre}>
+      <Icon name="sparkles" size={30} color={t.c.accent} />
       <Text style={[styles.h1, { color: t.c.text }]}>{greeting}</Text>
-      <Text style={[styles.lead, { color: t.c.secondary }]}>What would you like to do?</Text>
-      <View style={styles.cards}>
+      <View style={styles.chips}>
         {SUGGESTIONS.map((s) => (
           <Pressable
             key={s.title}
             onPress={() => { if (!busy) send(s.prompt); }}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.card, { backgroundColor: t.c.fill }, pressed && styles.dim]}
+            accessibilityLabel={s.prompt}
+            style={({ pressed }) => [styles.chip, { borderColor: t.c.line }, pressed && { backgroundColor: t.c.fill }]}
           >
-            <Icon name={s.icon} size={20} color={t.c.text} />
-            <Text style={[styles.cardTitle, { color: t.c.text }]}>{s.title}</Text>
-            <Text numberOfLines={2} style={[styles.cardBody, { color: t.c.secondary }]}>{s.prompt}</Text>
+            <Icon name={s.icon} size={15} color={t.c.secondary} />
+            <Text style={[styles.chipText, { color: t.c.text }]}>{s.title}</Text>
           </Pressable>
         ))}
       </View>
     </View>
   );
 }
-
-const POINTS: { icon: IconName; title: string; body: string }[] = [
-  { icon: 'lock.fill', title: 'Private', body: 'Runs on this iPhone. Nothing you type leaves it.' },
-  { icon: 'wifi.slash', title: 'Works offline', body: 'Once a model is downloaded, no connection is needed.' },
-  { icon: 'bolt.fill', title: 'Yours to tune', body: 'Pick the model, how it answers and what it remembers.' },
-];
 
 function Welcome({ t }: { t: Theme }) {
   const router = useRouter();
@@ -316,43 +269,24 @@ function Welcome({ t }: { t: Theme }) {
   const last = findModel(settings.modelId);
   const pick = last && downloaded[last.id] ? last : recommended(ramMB);
   return (
-    <View style={styles.welcome}>
-      <Text style={[styles.h1, { color: t.c.text }]}>A private assistant{'\n'}in your pocket</Text>
-      <View style={styles.points}>
-        {POINTS.map((p) => (
-          <View key={p.title} style={styles.point}>
-            <Icon name={p.icon} size={22} color={t.c.text} style={styles.pointIcon} />
-            <View style={styles.flex}>
-              <Text style={[styles.pointTitle, { color: t.c.text }]}>{p.title}</Text>
-              <Text style={[styles.pointBody, { color: t.c.secondary }]}>{p.body}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-
+    <View style={styles.centre}>
+      <Icon name="sparkles" size={30} color={t.c.accent} />
+      <Text style={[styles.h1, { color: t.c.text }]}>Private AI,{'\n'}on your iPhone</Text>
       {crashed && (
-        <View style={[styles.notice, { backgroundColor: t.c.fill }]}>
-          <Icon name="exclamationmark.triangle.fill" size={18} color={t.c.warn} />
-          <Text style={[styles.noticeText, { color: t.c.text }]}>
-            The app ran out of memory loading a model last time, so the context size is now Small. A
-            smaller model may also help.
-          </Text>
-        </View>
+        <Text style={[styles.notice, { color: t.c.warn }]}>
+          The last model ran out of memory. Try a smaller one.
+        </Text>
       )}
-
-      <Text style={[styles.section, { color: t.c.secondary }]}>
-        {downloaded[pick.id] ? 'Pick up where you left off' : 'Suggested for this iPhone'}
-      </Text>
-      <View style={[styles.pick, { backgroundColor: t.c.fill }]}>
+      <View style={[styles.pick, { backgroundColor: t.c.card, borderColor: t.c.line }]}>
         <ModelRow t={t} model={pick} />
       </View>
       <Pressable
         onPress={() => router.push('/models')}
+        hitSlop={10}
         accessibilityRole="button"
-        style={({ pressed }) => [styles.all, pressed && styles.dim]}
+        style={({ pressed }) => pressed && styles.dim}
       >
-        <Text style={[styles.allText, { color: t.c.text }]}>See all models</Text>
-        <Icon name="chevron.right" size={12} color={t.c.secondary} weight="semibold" />
+        <Text style={[styles.all, { color: t.c.secondary }]}>All models</Text>
       </Pressable>
     </View>
   );
@@ -362,32 +296,22 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   dim: { opacity: 0.5 },
   emptyBody: { flexGrow: 1, paddingHorizontal: 20 },
-  title: { flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: 220, paddingVertical: 6 },
-  titleText: { fontSize: 17, fontWeight: '600', flexShrink: 1 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0 },
   jump: { position: 'absolute', alignSelf: 'center' },
   jumpGlass: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
 
-  greeting: { flex: 1, justifyContent: 'center', paddingBottom: 40 },
-  h1: { fontSize: 32, lineHeight: 38, fontWeight: '700', letterSpacing: -0.6 },
-  lead: { fontSize: 17, marginTop: 6 },
-  cards: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 28 },
-  card: {
-    flexBasis: '47%', flexGrow: 1, borderRadius: 20, borderCurve: 'continuous', padding: 14, gap: 6, minHeight: 112,
+  centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 18, paddingBottom: 30 },
+  h1: { fontFamily: serif, fontSize: 34, lineHeight: 40, textAlign: 'center', letterSpacing: -0.3 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 6 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: StyleSheet.hairlineWidth, borderRadius: 100, paddingHorizontal: 14, paddingVertical: 9,
   },
-  cardTitle: { fontSize: 16, fontWeight: '600', marginTop: 4 },
-  cardBody: { fontSize: 14, lineHeight: 19 },
-
-  welcome: { paddingTop: 16 },
-  points: { gap: 18, marginTop: 28 },
-  point: { flexDirection: 'row', gap: 14 },
-  pointIcon: { marginTop: 2 },
-  pointTitle: { fontSize: 17, fontWeight: '600' },
-  pointBody: { fontSize: 15, lineHeight: 20, marginTop: 1 },
-  notice: { flexDirection: 'row', gap: 10, borderRadius: 18, borderCurve: 'continuous', padding: 14, marginTop: 24 },
-  noticeText: { flex: 1, fontSize: 14, lineHeight: 19 },
-  section: { fontSize: 14, fontWeight: '600', marginTop: 32, marginBottom: 8, marginLeft: 4 },
-  pick: { borderRadius: 22, borderCurve: 'continuous', overflow: 'hidden' },
-  all: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 18 },
-  allText: { fontSize: 16, fontWeight: '500' },
+  chipText: { fontSize: 15 },
+  notice: { fontSize: 14, textAlign: 'center' },
+  pick: {
+    alignSelf: 'stretch', borderRadius: 20, borderCurve: 'continuous', overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth, marginTop: 10,
+  },
+  all: { fontSize: 15, fontWeight: '500' },
 });

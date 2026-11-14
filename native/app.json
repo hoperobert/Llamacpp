@@ -37,7 +37,8 @@
       "@kesha-antonov/react-native-background-downloader",
       "expo-build-properties",
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-sqlite"
     ],
     "owner": "sunleaf",
     "extra": {

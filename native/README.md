@@ -50,18 +50,21 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
 ## What it does
 
 - **Chats** stream in with Markdown, tables and code blocks, are named
-  automatically, and can be searched, pinned, renamed and shared.
-- **Models** are grouped by speed, marked when they are too big for the
-  iPhone, and can be added from a link to any GGUF file.
+  automatically, and can be searched, pinned, renamed and shared from the
+  side menu.
+- **Models** are grouped by speed, and can be added from a link to any GGUF
+  file. Ones too big for the iPhone are not offered.
 - **Downloads** carry on in the background, show speed and time remaining,
   restart themselves after an app update, and ask before using mobile data.
 - **Thinking** can be switched on from the message box, and the reasoning is
   folded away under the reply.
-- **Memories** and **custom instructions** carry across chats.
+- **Memories** (stored in SQLite) and **custom instructions** carry across
+  chats.
 - **Replies** can be copied, shared, read aloud or asked for again.
 
 It uses the system's own navigation bars, sheets, menus and SF Symbols, and
-Liquid Glass for the message box on iOS 26 and later.
+Liquid Glass for the message box on iOS 26 and later. The look is warm and
+quiet: a paper-like palette, one accent colour, and replies set in a serif.
 
 ## Being a good citizen on the phone
 
@@ -104,7 +107,8 @@ script and that setting.
 | `src/lib/downloads.ts` | Background model downloads that survive the app closing. |
 | `src/lib/logic.ts` | Prompt building, context compaction, titles and memories. |
 | `src/lib/models.ts` | The model catalogue and how well each suits a device. |
-| `src/lib/storage.ts` | Chats, memories and settings saved on the device. |
+| `src/lib/storage.ts` | Chats and settings saved on the device. |
+| `src/lib/memories.ts` | Memories, kept in a SQLite database. |
 | `src/ui/` | Shared pieces: messages, the message box, lists, Markdown, icons. |
 
 ## Checks

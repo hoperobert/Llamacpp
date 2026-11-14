@@ -45,6 +45,9 @@ const SYMBOLS = {
   'fork.knife': 'restaurant',
   'chevron.left.forwardslash.chevron.right': 'code',
   'globe': 'language',
+  'magnifyingglass': 'search',
+  'gearshape': 'settings',
+  'plus.circle.fill': 'add_circle',
 } as const;
 
 export type IconName = keyof typeof SYMBOLS;
