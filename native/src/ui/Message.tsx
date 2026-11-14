@@ -2,8 +2,9 @@
 // thinking, its actions and its speed.
 
 import React, { useEffect, useState } from 'react';
-import { ActionSheetIOS, Animated, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { app, copyText, editLast, regenerate, shareText, speak } from '../lib/app';
+import { ActionSheetIOS, Animated, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { app, copyText, editMessage, regenerate, shareText, speak } from '../lib/app';
+import { imageUri } from '../lib/images';
 import type { Message } from '../lib/storage';
 import { Icon, type IconName } from './Icon';
 import { Markdown } from './Markdown';
@@ -14,7 +15,7 @@ type Props = {
   message: Message;
   /** True while this reply is still being written. */
   streaming?: boolean;
-  /** The last question, which can be taken back and changed. */
+  /** One of the user's messages, which can be taken back and changed. */
   canEdit?: boolean;
   /** The last reply, which can be asked for again. */
   canRetry?: boolean;
@@ -29,7 +30,7 @@ function menu(message: Message, canEdit?: boolean) {
     { label: 'Copy', run: () => copyText(message.content) },
     { label: 'Share…', run: () => shareText(message.content) },
   ];
-  if (canEdit) actions.push({ label: 'Edit', run: editLast });
+  if (canEdit) actions.push({ label: 'Edit', run: () => editMessage(message.id) });
   ActionSheetIOS.showActionSheetWithOptions(
     { options: [...actions.map((a) => a.label), 'Cancel'], cancelButtonIndex: actions.length },
     (index) => actions[index]?.run(),
@@ -44,11 +45,16 @@ export const MessageRow = React.memo(function MessageRow(p: Props) {
       {!!divider && <Text style={[styles.divider, { color: t.c.tertiary }]}>{divider}</Text>}
       {message.role === 'user' ? (
         <Pressable onLongPress={onLongPress} delayLongPress={320} style={styles.userRow}>
-          <View style={[styles.bubble, { backgroundColor: t.c.fill }]}>
-            <Text style={{ color: t.c.text, fontSize: t.size, lineHeight: t.size * 1.4 }}>
-              {message.content}
-            </Text>
-          </View>
+          {!!message.image && (
+            <Image source={{ uri: imageUri(message.image) }} style={[styles.photo, { backgroundColor: t.c.fill }]} />
+          )}
+          {!!message.content && (
+            <View style={[styles.bubble, { backgroundColor: t.c.fill }]}>
+              <Text style={{ color: t.c.text, fontSize: t.size, lineHeight: t.size * 1.4 }}>
+                {message.content}
+              </Text>
+            </View>
+          )}
         </Pressable>
       ) : (
         // No press-and-hold menu here: holding a reply selects its text instead.
@@ -161,7 +167,8 @@ function Dots({ t }: { t: Theme }) {
 const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 16, paddingVertical: 9 },
   divider: { textAlign: 'center', fontSize: 12, marginBottom: 16 },
-  userRow: { alignItems: 'flex-end' },
+  userRow: { alignItems: 'flex-end', gap: 6 },
+  photo: { width: 220, height: 220, borderRadius: 20, borderCurve: 'continuous' },
   bubble: {
     maxWidth: '84%', borderRadius: 24, borderCurve: 'continuous',
     paddingHorizontal: 17, paddingVertical: 11,

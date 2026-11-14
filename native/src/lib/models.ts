@@ -11,6 +11,8 @@ export type Model = {
   file: string;
   url: string;
   group: Group;
+  /** The extra file that lets this model look at photos, when one exists. */
+  vision?: { file: string; url: string; sizeMB: number };
 };
 
 export const GROUPS: { id: Group; title: string }[] = [
@@ -49,6 +51,11 @@ export const MODELS: Model[] = [
     file: 'Qwen3.5-2B-Q4_K_M.gguf',
     url: 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf',
     group: 'fast',
+    vision: {
+      file: 'Qwen3.5-2B-mmproj-F16.gguf',
+      url: 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/mmproj-F16.gguf',
+      sizeMB: 668,
+    },
   },
   {
     id: 'qwen38-2b-distill',
@@ -76,6 +83,11 @@ export const MODELS: Model[] = [
     file: 'gemma-4-E2B-it-Q4_0.gguf',
     url: 'https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_0.gguf',
     group: 'smart',
+    vision: {
+      file: 'mmproj-gemma-4-E2B-it-Q8_0.gguf',
+      url: 'https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/mmproj-gemma-4-E2B-it-Q8_0.gguf',
+      sizeMB: 557,
+    },
   },
   {
     id: 'qwen35-4b',
@@ -85,6 +97,11 @@ export const MODELS: Model[] = [
     file: 'Qwen3.5-4B-Q4_K_M.gguf',
     url: 'https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf',
     group: 'smart',
+    vision: {
+      file: 'mmproj-Qwen3.5-4B-Q8_0.gguf',
+      url: 'https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF/resolve/main/mmproj-Qwen3.5-4B-Q8_0.gguf',
+      sizeMB: 366,
+    },
   },
   {
     id: 'qwen38-4b-distill',
@@ -171,6 +188,18 @@ export const MODELS: Model[] = [
 
 export const formatMB = (mb: number) =>
   mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+
+/** The photo add-on for a model, as something the download code can fetch. Null if the model has none. */
+export function visionAddon(model: Model): Model | null {
+  if (!model.vision) return null;
+  return {
+    id: `${model.id}-vision`,
+    name: `Photos for ${model.name}`,
+    note: '',
+    group: model.group,
+    ...model.vision,
+  };
+}
 
 export type Fit = 'good' | 'tight' | 'no';
 

@@ -1,12 +1,14 @@
 // Wraps llama.rn (llama.cpp built natively, running on the GPU through Metal).
 
 import { BuildInfo, initLlama, type LlamaContext } from 'llama.rn';
+import { imageUri } from './images';
 
 let context: LlamaContext | null = null;
+let vision = false;
 
 export const engineVersion = `b${BuildInfo.number}`;
 
-type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string; image?: string };
 
 export type Timings = {
   /** Tokens in the context after this reply. */
@@ -17,22 +19,39 @@ export type Timings = {
   thought: number;
 };
 
+/**
+ * Loads a model. With a projector file, the model can also look at photos;
+ * if that part fails the model still loads and simply cannot see them.
+ */
 export async function loadModel(
   uri: string,
   nCtx: number,
   onProgress: (fraction: number) => void,
-): Promise<{ gpu: boolean }> {
+  projectorUri?: string,
+): Promise<{ gpu: boolean; vision: boolean }> {
   await unloadModel();
   context = await initLlama(
-    { model: uri, n_ctx: nCtx, n_batch: 512, n_gpu_layers: 99, use_mlock: false },
+    {
+      model: uri, n_ctx: nCtx, n_batch: 512, n_gpu_layers: 99, use_mlock: false,
+      // Photos take a fixed place in the context, so it cannot be shifted along.
+      ...(projectorUri ? { ctx_shift: false } : {}),
+    },
     (percent) => onProgress(Math.min(1, percent / 100)),
   );
-  return { gpu: context.gpu };
+  if (projectorUri) {
+    try {
+      vision = await context.initMultimodal({ path: projectorUri, use_gpu: true });
+    } catch {
+      vision = false;
+    }
+  }
+  return { gpu: context.gpu, vision };
 }
 
 export async function unloadModel() {
   const old = context;
   context = null;
+  vision = false;
   if (old) await old.release().catch(() => {});
 }
 
@@ -55,7 +74,16 @@ export async function chat(
   let sawReasoning = false;
   const result = await context.completion(
     {
-      messages,
+      // A photo is only passed on when the loaded model can look at it.
+      messages: messages.map((m) => (m.image && vision
+        ? {
+          role: m.role,
+          content: [
+            { type: 'text', text: m.content || 'What is in this photo?' },
+            { type: 'image_url', image_url: { url: imageUri(m.image) } },
+          ],
+        }
+        : { role: m.role, content: m.content || '(a photo this model cannot see)' })),
       jinja: true,
       enable_thinking: options.thinking,
       reasoning_format: 'auto',
@@ -93,7 +121,7 @@ export async function complete(
 ): Promise<string> {
   if (!context) throw new Error('No model is loaded');
   const result = await context.completion({
-    messages,
+    messages: messages.map(({ role, content }) => ({ role, content })),
     jinja: true,
     enable_thinking: false,
     n_predict: options.maxTokens ?? 200,

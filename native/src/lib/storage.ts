@@ -2,13 +2,15 @@
 // key-value storage. Chats and memories are in the database (db.ts).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { chatStore } from './db';
+import { chatStore, projectStore } from './db';
 import type { Model } from './models';
 
 export type Message = {
   id?: string;
   role: 'user' | 'assistant';
   content: string;
+  /** A photo sent with the message: a name inside the app's storage. */
+  image?: string;
   reasoning?: string;
   /** Seconds spent thinking before the answer started. */
   thought?: number;
@@ -23,6 +25,10 @@ export type Chat = {
   /** True once the title was written by the model or the user, not cut from the first message. */
   titled?: boolean;
   pinned?: boolean;
+  /** The project this chat belongs to, if any. */
+  projectId?: string;
+  /** An incognito chat is never saved, named or used for memories. */
+  incognito?: boolean;
   messages: Message[];
   summary: string;
   /** Messages before this index are no longer sent to the model. */
@@ -32,12 +38,28 @@ export type Chat = {
   updatedAt: number;
 };
 
-export type ChatMeta = Pick<Chat, 'id' | 'title' | 'updatedAt' | 'pinned'>;
+export type ChatMeta = Pick<Chat, 'id' | 'title' | 'updatedAt' | 'pinned' | 'projectId'>;
 export type Memory = { id: string; text: string };
+
+/** A group of chats that share instructions. */
+export type Project = { id: string; name: string; instructions: string };
+
+export const STYLES = [
+  { id: 'normal', label: 'Normal', prompt: '' },
+  { id: 'concise', label: 'Concise', prompt: 'Be brief. Answer in as few words as the question allows.' },
+  {
+    id: 'explanatory', label: 'Explain',
+    prompt: 'Explain step by step, as a patient teacher would, with an example where it helps.',
+  },
+  { id: 'formal', label: 'Formal', prompt: 'Write formally and precisely, as in a professional document.' },
+] as const;
+
+export type StyleId = (typeof STYLES)[number]['id'];
 
 export type Settings = {
   modelId: string | null;
   instructions: string;
+  style: StyleId;
   temperature: number;
   maxTokens: number;
   nCtx: number;
@@ -58,6 +80,7 @@ export type Settings = {
 export const DEFAULT_SETTINGS: Settings = {
   modelId: null,
   instructions: '',
+  style: 'normal',
   temperature: 0.7,
   maxTokens: 768,
   nCtx: 4096,
@@ -100,8 +123,9 @@ export const store = {
   pausedDownloads: () => read<string[]>('pausedDownloads', []),
   savePausedDownloads: (ids: string[]) => write('pausedDownloads', ids),
 
-  // Chats and their messages are in the database (db.ts).
+  // Chats, their messages and projects are in the database (db.ts).
   ...chatStore,
+  ...projectStore,
 
   /** Marker written while a model is loading; still present at start means the load crashed the app. */
   loadMarker: () => read<{ modelId: string; nCtx: number } | null>('loading', null),
@@ -109,8 +133,9 @@ export const store = {
     value ? write('loading', value) : AsyncStorage.removeItem('loading').catch(() => {}),
 };
 
-export const blankChat = (): Chat => ({
+export const blankChat = (options: { projectId?: string; incognito?: boolean } = {}): Chat => ({
   id: newId(), title: 'New chat', messages: [], summary: '', cut: 0, ctx: null, updatedAt: Date.now(),
+  ...options,
 });
 
 /** A chat written out as Markdown, for sharing. */

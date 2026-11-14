@@ -7,9 +7,10 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import {
-  app, contextUse, findModel, newChat, removeChat, renameChat, send, shareChat, summariseNow, togglePin,
+  app, findModel, newChat, removeChat, renameChat, send, shareChat, summariseNow, togglePin,
 } from '../lib/app';
 import { ramMB } from '../lib/device';
+import { usedTokens } from '../lib/logic';
 import { recommended } from '../lib/models';
 import type { Message } from '../lib/storage';
 import { Composer } from '../ui/Composer';
@@ -125,11 +126,10 @@ type Row = {
 function buildRows(
   messages: Message[], live: Message | null, cut: number, summarised: boolean, busy: boolean, ready: boolean,
 ): Row[] {
-  const lastUser = messages.map((m) => m.role).lastIndexOf('user');
   const rows: Row[] = messages.map((message, i) => ({
     key: message.id ?? `m${i}`,
     message,
-    canEdit: !busy && i === lastUser,
+    canEdit: !busy && message.role === 'user',
     canRetry: !busy && ready && i === messages.length - 1 && message.role === 'assistant',
     divider: cut > 0 && i === cut
       ? summarised ? 'Earlier messages were summarised' : 'Earlier messages are out of context'
@@ -169,7 +169,11 @@ function Header() {
   const busy = app.use((s) => s.busy);
   const ready = app.use((s) => s.engine.status === 'ready');
   const hasMessages = chat.messages.length > 0;
-  const used = contextUse(chat, settings, memories);
+  // Projects, memories and settings all change how much room a chat takes.
+  const projects = app.use((s) => s.projects);
+  const used = usedTokens(
+    chat, settings, chat.incognito ? [] : memories, projects.find((p) => p.id === chat.projectId),
+  );
   const percent = Math.min(100, Math.round((used / settings.nCtx) * 100));
 
   const showContext = () => {
@@ -193,7 +197,16 @@ function Header() {
 
   return (
     <>
-      <Stack.Screen options={{ headerTitle: () => <TitlePill onPress={hasMessages ? rename : undefined} /> }} />
+      <Stack.Screen
+        options={{
+          headerTitle: () => <TitlePill onPress={hasMessages && !chat.incognito ? rename : undefined} />,
+          // The browser preview has no system toolbar, so it gets plain buttons instead.
+          ...(Platform.OS === 'web' ? {
+            headerLeft: () => <WebButton icon="line.3.horizontal" label="Chats" onPress={() => router.push('/chats')} />,
+            headerRight: () => <WebButton icon="gearshape" label="Settings" onPress={() => router.push('/settings')} />,
+          } : {}),
+        }}
+      />
       <Stack.Toolbar placement="left">
         <Stack.Toolbar.Button
           icon="line.3.horizontal"
@@ -203,8 +216,15 @@ function Header() {
       </Stack.Toolbar>
       <Stack.Toolbar placement="right">
         <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="More">
-          <Stack.Toolbar.MenuAction icon="square.and.pencil" disabled={!hasMessages} onPress={newChat}>
+          <Stack.Toolbar.MenuAction
+            icon="square.and.pencil"
+            disabled={!hasMessages && !chat.incognito}
+            onPress={() => newChat({ projectId: chat.projectId })}
+          >
             New Chat
+          </Stack.Toolbar.MenuAction>
+          <Stack.Toolbar.MenuAction icon="eye.slash" onPress={() => newChat({ incognito: true })}>
+            New Incognito Chat
           </Stack.Toolbar.MenuAction>
           <Stack.Toolbar.MenuAction icon="gauge.with.dots.needle.33percent" hidden={!hasMessages} onPress={showContext}>
             {`Context ${percent}% Full`}
@@ -213,12 +233,12 @@ function Header() {
             <Stack.Toolbar.MenuAction icon="square.and.arrow.up" hidden={!hasMessages} onPress={() => shareChat(chat.id)}>
               Share
             </Stack.Toolbar.MenuAction>
-            <Stack.Toolbar.MenuAction icon="pencil" hidden={!hasMessages} onPress={rename}>
+            <Stack.Toolbar.MenuAction icon="pencil" hidden={!hasMessages || !!chat.incognito} onPress={rename}>
               Rename
             </Stack.Toolbar.MenuAction>
             <Stack.Toolbar.MenuAction
               icon={chat.pinned ? 'pin.slash' : 'pin'}
-              hidden={!hasMessages}
+              hidden={!hasMessages || !!chat.incognito}
               onPress={() => togglePin(chat)}
             >
               {chat.pinned ? 'Unpin' : 'Pin'}
@@ -236,21 +256,34 @@ function Header() {
   );
 }
 
+function WebButton({ icon, label, onPress }: { icon: IconName; label: string; onPress: () => void }) {
+  const t = useTheme();
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} style={styles.webButton}>
+      <Icon name={icon} size={20} color={t.c.text} />
+    </Pressable>
+  );
+}
+
 /** The chat's name over the model's, in a glass pill in the middle of the header. */
 function TitlePill({ onPress }: { onPress?: () => void }) {
   const t = useTheme();
-  const title = app.use((s) => (s.chat.messages.length ? s.chat.title : 'New chat'));
+  const title = app.use((s) => (s.chat.incognito ? 'Incognito' : s.chat.messages.length ? s.chat.title : 'New chat'));
+  const projectId = app.use((s) => s.chat.projectId);
+  const projects = app.use((s) => s.projects);
+  const project = projects.find((p) => p.id === projectId);
   const engine = app.use((s) => s.engine);
   const busy = app.use((s) => s.busy);
   const model = findModel(engine.modelId);
   const subtitle = engine.status === 'loading'
     ? `Loading ${Math.round(engine.fraction * 100)}%`
     : engine.status === 'ready' && model ? (busy ? `${model.name} · Writing` : model.name) : 'No model';
+  const line = project ? `${project.name} · ${subtitle}` : subtitle;
   return (
     <Pressable onPress={onPress} disabled={!onPress} accessibilityRole="header" style={({ pressed }) => pressed && styles.dim}>
       <Glass c={t.c} style={styles.pill}>
         <Text numberOfLines={1} style={[styles.pillTitle, { color: t.c.text }]}>{title}</Text>
-        <Text numberOfLines={1} style={[styles.pillSub, { color: t.c.secondary }]}>{subtitle}</Text>
+        <Text numberOfLines={1} style={[styles.pillSub, { color: t.c.secondary }]}>{line}</Text>
       </Glass>
     </Pressable>
   );
@@ -260,12 +293,14 @@ function TitlePill({ onPress }: { onPress?: () => void }) {
 
 function Greeting({ t }: { t: Theme }) {
   const busy = app.use((s) => s.busy);
+  const incognito = app.use((s) => !!s.chat.incognito);
   const hour = new Date().getHours();
   const greeting = hour < 5 ? 'Up late?' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   return (
     <View style={styles.centre}>
-      <Icon name="sparkles" size={30} color={t.c.accent} />
-      <Text style={[styles.h1, { color: t.c.text }]}>{greeting}</Text>
+      <Icon name={incognito ? 'eye.slash' : 'sparkles'} size={30} color={t.c.accent} />
+      <Text style={[styles.h1, { color: t.c.text }]}>{incognito ? 'Incognito' : greeting}</Text>
+      {incognito && <Text style={[styles.notice, { color: t.c.secondary }]}>Not saved. No memories.</Text>}
       <View style={styles.chips}>
         {SUGGESTIONS.map((s) => (
           <Pressable
@@ -327,6 +362,7 @@ const styles = StyleSheet.create({
     height: 44, borderRadius: 22, paddingHorizontal: 20, maxWidth: 230,
     alignItems: 'center', justifyContent: 'center',
   },
+  webButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pillTitle: { fontSize: 15, fontWeight: '700' },
   pillSub: { fontSize: 12, marginTop: -1 },
 

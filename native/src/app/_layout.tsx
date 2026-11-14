@@ -35,6 +35,14 @@ export default function RootLayout() {
         />
         <Stack.Screen name="models" options={{ title: 'Models', presentation: 'modal' }} />
         <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="projects" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen
+          name="options"
+          options={{
+            headerShown: false, presentation: 'formSheet', sheetAllowedDetents: [0.52],
+            sheetGrabberVisible: true, sheetCornerRadius: 28,
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );

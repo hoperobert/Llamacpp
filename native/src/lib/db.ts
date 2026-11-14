@@ -5,7 +5,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SQLite from 'expo-sqlite';
-import type { Chat, ChatMeta, Memory, Message } from './storage';
+import type { Chat, ChatMeta, Memory, Message, Project } from './storage';
 
 type Db = SQLite.SQLiteDatabase;
 
@@ -39,6 +39,12 @@ const SCHEMA = `
     stopped TEXT,
     PRIMARY KEY (chat_id, position)
   );
+  CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    instructions TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+  );
   CREATE INDEX IF NOT EXISTS chats_by_time ON chats(updated_at DESC);
 `;
 
@@ -48,6 +54,15 @@ function database(): Promise<Db> {
   opening ??= (async () => {
     const db = await SQLite.openDatabaseAsync('pocket.db');
     await db.execAsync(SCHEMA);
+    // Columns added after the first release of the database.
+    const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(chats)');
+    if (!columns.some((c) => c.name === 'project_id')) {
+      await db.execAsync('ALTER TABLE chats ADD COLUMN project_id TEXT');
+    }
+    const messageColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(messages)');
+    if (!messageColumns.some((c) => c.name === 'image')) {
+      await db.execAsync('ALTER TABLE messages ADD COLUMN image TEXT');
+    }
     await importOlderData(db);
     return db;
   })();
@@ -66,22 +81,23 @@ function inTurn<T>(job: () => Promise<T>): Promise<T> {
 
 async function writeChat(db: Db, chat: Chat) {
   await db.runAsync(
-    `INSERT INTO chats (id, title, titled, pinned, summary, cut, ctx, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO chats (id, title, titled, pinned, summary, cut, ctx, updated_at, project_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title, titled = excluded.titled, pinned = excluded.pinned,
-       summary = excluded.summary, cut = excluded.cut, ctx = excluded.ctx, updated_at = excluded.updated_at`,
+       summary = excluded.summary, cut = excluded.cut, ctx = excluded.ctx,
+       updated_at = excluded.updated_at, project_id = excluded.project_id`,
     chat.id, chat.title, chat.titled ? 1 : 0, chat.pinned ? 1 : 0, chat.summary, chat.cut,
-    chat.ctx ? JSON.stringify(chat.ctx) : null, chat.updatedAt,
+    chat.ctx ? JSON.stringify(chat.ctx) : null, chat.updatedAt, chat.projectId ?? null,
   );
   await db.runAsync('DELETE FROM messages WHERE chat_id = ?', chat.id);
   for (let i = 0; i < chat.messages.length; i++) {
     const m = chat.messages[i];
     await db.runAsync(
-      `INSERT INTO messages (chat_id, position, id, role, content, reasoning, thought, speed, stopped)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO messages (chat_id, position, id, role, content, reasoning, thought, speed, stopped, image)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       chat.id, i, m.id ?? newId(), m.role, m.content, m.reasoning ?? null, m.thought ?? null,
-      m.speed ?? null, m.stopped ?? null,
+      m.speed ?? null, m.stopped ?? null, m.image ?? null,
     );
   }
 }
@@ -164,20 +180,21 @@ export const memoryStore = {
 
 type ChatRow = {
   id: string; title: string; titled: number; pinned: number; summary: string; cut: number;
-  ctx: string | null; updated_at: number;
+  ctx: string | null; updated_at: number; project_id: string | null;
 };
 type MessageRow = {
   id: string; role: Message['role']; content: string; reasoning: string | null;
-  thought: number | null; speed: number | null; stopped: string | null;
+  thought: number | null; speed: number | null; stopped: string | null; image: string | null;
 };
-type MetaRow = Pick<ChatRow, 'id' | 'title' | 'pinned' | 'updated_at'> & { snippet?: string | null };
+type MetaRow = Pick<ChatRow, 'id' | 'title' | 'pinned' | 'updated_at' | 'project_id'> & { snippet?: string | null };
 
 const toMeta = (row: MetaRow): ChatMeta => ({
   id: row.id, title: row.title, updatedAt: row.updated_at, pinned: !!row.pinned,
+  projectId: row.project_id ?? undefined,
 });
 
 async function list(db: Db): Promise<ChatMeta[]> {
-  const rows = await db.getAllAsync<MetaRow>('SELECT id, title, pinned, updated_at FROM chats ORDER BY updated_at DESC');
+  const rows = await db.getAllAsync<MetaRow>('SELECT id, title, pinned, updated_at, project_id FROM chats ORDER BY updated_at DESC');
   return rows.map(toMeta);
 }
 
@@ -196,7 +213,7 @@ export const chatStore = {
       const row = await db.getFirstAsync<ChatRow>('SELECT * FROM chats WHERE id = ?', id);
       if (!row) return null;
       const messages = await db.getAllAsync<MessageRow>(
-        'SELECT id, role, content, reasoning, thought, speed, stopped FROM messages WHERE chat_id = ? ORDER BY position',
+        'SELECT id, role, content, reasoning, thought, speed, stopped, image FROM messages WHERE chat_id = ? ORDER BY position',
         id,
       );
       return {
@@ -204,6 +221,7 @@ export const chatStore = {
         title: row.title,
         titled: !!row.titled,
         pinned: !!row.pinned,
+        projectId: row.project_id ?? undefined,
         summary: row.summary,
         cut: row.cut,
         ctx: row.ctx ? JSON.parse(row.ctx) : null,
@@ -216,6 +234,7 @@ export const chatStore = {
           thought: m.thought ?? undefined,
           speed: m.speed ?? undefined,
           stopped: m.stopped ?? undefined,
+          image: m.image ?? undefined,
         })),
       };
     } catch {
@@ -232,12 +251,15 @@ export const chatStore = {
   },
 
   /** Changes a chat's title or pin without moving it to the top of the list. */
-  updateChat(id: string, patch: Partial<Pick<Chat, 'title' | 'titled' | 'pinned'>>): Promise<ChatMeta[]> {
+  updateChat(
+    id: string, patch: Partial<Pick<Chat, 'title' | 'titled' | 'pinned'>> & { projectId?: string | null },
+  ): Promise<ChatMeta[]> {
     return inTurn(async () => {
       const db = await database();
       if (patch.title !== undefined) await db.runAsync('UPDATE chats SET title = ? WHERE id = ?', patch.title, id);
       if (patch.titled !== undefined) await db.runAsync('UPDATE chats SET titled = ? WHERE id = ?', patch.titled ? 1 : 0, id);
       if (patch.pinned !== undefined) await db.runAsync('UPDATE chats SET pinned = ? WHERE id = ?', patch.pinned ? 1 : 0, id);
+      if (patch.projectId !== undefined) await db.runAsync('UPDATE chats SET project_id = ? WHERE id = ?', patch.projectId, id);
       return list(db);
     });
   },
@@ -270,7 +292,7 @@ export const chatStore = {
     try {
       const db = await database();
       const rows = await db.getAllAsync<MetaRow>(
-        `SELECT c.id, c.title, c.pinned, c.updated_at,
+        `SELECT c.id, c.title, c.pinned, c.updated_at, c.project_id,
            (SELECT substr(m.content, max(1, instr(lower(m.content), ?) - 30), 100)
               FROM messages m
              WHERE m.chat_id = c.id AND instr(lower(m.content), ?) > 0
@@ -289,5 +311,39 @@ export const chatStore = {
     } catch {
       return [];
     }
+  },
+};
+
+// ---------- projects ----------
+
+export const projectStore = {
+  async projects(): Promise<Project[]> {
+    try {
+      const db = await database();
+      return await db.getAllAsync<Project>('SELECT id, name, instructions FROM projects ORDER BY created_at DESC');
+    } catch {
+      return [];
+    }
+  },
+
+  saveProject(project: Project): Promise<void> {
+    return inTurn(async () => {
+      const db = await database();
+      await db.runAsync(
+        `INSERT INTO projects (id, name, instructions, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET name = excluded.name, instructions = excluded.instructions`,
+        project.id, project.name, project.instructions, Date.now(),
+      );
+    });
+  },
+
+  /** Removes a project. Its chats are kept and simply stop belonging to it. */
+  deleteProject(id: string): Promise<ChatMeta[]> {
+    return inTurn(async () => {
+      const db = await database();
+      await db.runAsync('UPDATE chats SET project_id = NULL WHERE project_id = ?', id);
+      await db.runAsync('DELETE FROM projects WHERE id = ?', id);
+      return list(db);
+    });
   },
 };

@@ -18,10 +18,11 @@ import {
   addMemory, compact, ensureRoom, extractFacts, promptMessages, replyBudget, suggestTitle, usedTokens,
 } from './logic';
 import { memoryStore } from './db';
-import { fit, formatMB, modelFromUrl, MODELS, type Model } from './models';
+import { deleteAllImages, deleteImages, keepImage, pickImage } from './images';
+import { fit, formatMB, modelFromUrl, MODELS, visionAddon, type Model } from './models';
 import {
   blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store,
-  type Chat, type ChatMeta, type Memory, type Message, type Settings,
+  type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
 import { createStore } from './store';
 
@@ -31,6 +32,8 @@ export type EngineState = {
   fraction: number;
   error: string | null;
   gpu: boolean;
+  /** True when the loaded model can look at photos. */
+  vision: boolean;
 };
 
 type State = {
@@ -38,6 +41,7 @@ type State = {
   hydrated: boolean;
   settings: Settings;
   memories: Memory[];
+  projects: Project[];
   chatList: ChatMeta[];
   chat: Chat;
   engine: EngineState;
@@ -52,17 +56,20 @@ type State = {
   draft: string;
   /** A message typed while a reply was being written, to send when it finishes. */
   queued: string;
+  /** A photo waiting to be sent with the next message. */
+  attachment: string | null;
   crashed: boolean;
   toast: string;
   speakingId: string | null;
 };
 
-const NO_ENGINE: EngineState = { status: 'none', modelId: null, fraction: 0, error: null, gpu: false };
+const NO_ENGINE: EngineState = { status: 'none', modelId: null, fraction: 0, error: null, gpu: false, vision: false };
 
 export const app = createStore<State>({
   hydrated: false,
   settings: DEFAULT_SETTINGS,
   memories: [],
+  projects: [],
   chatList: [],
   chat: blankChat(),
   engine: NO_ENGINE,
@@ -74,13 +81,26 @@ export const app = createStore<State>({
   live: null,
   draft: '',
   queued: '',
+  attachment: null,
   crashed: false,
   toast: '',
   speakingId: null,
 });
 
 export const allModels = () => [...MODELS, ...app.get().customModels];
+/** Everything that can be downloaded: the models, and the photo add-ons some of them have. */
+const allFiles = () => allModels().flatMap((m) => {
+  const addon = visionAddon(m);
+  return addon ? [m, addon] : [m];
+});
 export const findModel = (id: string | null) => allModels().find((m) => m.id === id) ?? null;
+export const findProject = (id?: string) => app.get().projects.find((p) => p.id === id);
+
+/** What the model is given alongside a chat's messages. An incognito chat gets no memories. */
+function contextFor(chat: Chat) {
+  const { settings, memories } = app.get();
+  return { settings, memories: chat.incognito ? [] : memories, project: findProject(chat.projectId) };
+}
 
 // ---------- small helpers ----------
 
@@ -131,7 +151,8 @@ async function saveChat(next: Chat): Promise<Chat> {
   const stamped = { ...next, updatedAt: Date.now() };
   // Only replace what is on screen if that chat is still the open one.
   if (app.get().chat.id === stamped.id) app.set({ chat: stamped });
-  if (stamped.messages.length) {
+  // An incognito chat only ever exists on screen.
+  if (stamped.messages.length && !stamped.incognito) {
     const chatList = await store.saveChat(stamped);
     app.set({ chatList });
   }
@@ -146,8 +167,9 @@ export async function start() {
   if (started) return;
   started = true;
 
-  const [savedSettings, memories, chatList, marker, customModels] = await Promise.all([
+  const [savedSettings, memories, chatList, marker, customModels, projects] = await Promise.all([
     store.settings(), memoryStore.all(), store.chatList(), store.loadMarker(), store.customModels(),
+    store.projects(),
   ]);
   let settings = savedSettings;
   // A marker left behind means the last load took the app down, most likely
@@ -157,9 +179,9 @@ export async function start() {
     if (settings.nCtx > 2048) settings = { ...settings, nCtx: 2048 };
     store.saveSettings(settings);
   }
-  app.set({ settings, memories, chatList, customModels, crashed: !!marker });
+  app.set({ settings, memories, chatList, customModels, projects, crashed: !!marker });
 
-  const models = allModels();
+  const models = allFiles();
   const flags = await Promise.all(models.map((m) => isDownloaded(m)));
   const downloaded: Record<string, boolean> = {};
   models.forEach((m, i) => { if (flags[i]) downloaded[m.id] = true; });
@@ -175,11 +197,19 @@ export async function start() {
         : { downloads };
     });
     if (done) {
-      const model = findModel(modelId);
-      toast(`${model?.name ?? 'Model'} is ready`);
+      const file = allFiles().find((m) => m.id === modelId);
+      toast(`${file?.name ?? 'Model'} is ready`);
       haptic('success');
-      // The first model someone downloads is the one they want to talk to.
-      if (model && app.get().engine.status === 'none' && !app.get().settings.loadedOnce) loadModel(model);
+      const model = findModel(modelId);
+      const { engine: state } = app.get();
+      if (model) {
+        // The first model someone downloads is the one they want to talk to.
+        if (state.status === 'none' && !app.get().settings.loadedOnce) loadModel(model);
+      } else {
+        // A photo add-on arrived: reload its model so it can start looking at photos.
+        const base = allModels().find((m) => visionAddon(m)?.id === modelId);
+        if (base && state.status === 'ready' && state.modelId === base.id) loadModel(base);
+      }
     }
   });
 
@@ -226,19 +256,21 @@ function onMemoryWarning() {
 // ---------- models ----------
 
 export async function loadModel(model: Model, nCtx = app.get().settings.nCtx) {
-  app.set({ engine: { status: 'loading', modelId: model.id, fraction: 0, error: null, gpu: false } });
+  app.set({ engine: { status: 'loading', modelId: model.id, fraction: 0, error: null, gpu: false, vision: false } });
   await withEngine(async () => {
     await store.setLoadMarker({ modelId: model.id, nCtx });
     await activateKeepAwakeAsync('load').catch(() => {});
     try {
       let last = 0;
-      const { gpu } = await engine.loadModel(modelUri(model), nCtx, (fraction) => {
+      const addon = visionAddon(model);
+      const projector = addon && app.get().downloaded[addon.id] ? modelUri(addon) : undefined;
+      const { gpu, vision } = await engine.loadModel(modelUri(model), nCtx, (fraction) => {
         // The engine reports progress far more often than the eye needs.
         if (fraction - last < 0.02 && fraction < 1) return;
         last = fraction;
         app.set((s) => (s.engine.status === 'loading' ? { engine: { ...s.engine, fraction } } : {}));
-      });
-      app.set({ engine: { status: 'ready', modelId: model.id, fraction: 1, error: null, gpu }, crashed: false });
+      }, projector);
+      app.set({ engine: { status: 'ready', modelId: model.id, fraction: 1, error: null, gpu, vision }, crashed: false });
       updateSettings({ modelId: model.id, loadedOnce: true });
       haptic('success');
     } catch (e) {
@@ -311,9 +343,12 @@ export function removeModel(model: Model) {
           app.set({ engine: NO_ENGINE });
         }
         await deleteModel(model);
+        const addon = visionAddon(model);
+        if (addon) await deleteModel(addon);
         app.set((s) => {
           const downloaded = { ...s.downloaded };
           delete downloaded[model.id];
+          if (addon) delete downloaded[addon.id];
           return { downloaded };
         });
         if (custom) {
@@ -412,15 +447,15 @@ async function runTurn(userText: string | null) {
     const current = () => app.get().chat;
     const onScreen = () => current().id === chatId;
     try {
-      const { settings, memories } = app.get();
-      if (usedTokens(current(), settings, memories) > settings.nCtx - replyBudget(settings) - 48) {
+      const { settings, memories, project } = contextFor(current());
+      if (usedTokens(current(), settings, memories, project) > settings.nCtx - replyBudget(settings) - 48) {
         app.set({ status: 'Summarising earlier messages…' });
-        await saveChat(await ensureRoom(current(), settings, memories));
+        await saveChat(await ensureRoom(current(), settings, memories, project));
         app.set({ status: '' });
       }
       let lastPaint = 0;
       const result = await engine.chat(
-        promptMessages(current(), settings, memories),
+        promptMessages(current(), settings, memories, project),
         { temperature: settings.temperature, maxTokens: replyBudget(settings), thinking: settings.thinking },
         (content, reasoning) => {
           message.content = content;
@@ -469,25 +504,27 @@ async function runTurn(userText: string | null) {
   if (!stoppedByUser && !interrupted) haptic('success');
 
   // Side jobs wait if the chat is long. See flushSideJobs.
-  const { chat, settings, memories, queued } = app.get();
+  const { chat, queued } = app.get();
+  const { settings, memories, project } = contextFor(chat);
   if (queued) {
     app.set({ queued: '' });
     // Send what was lined up, unless the reply was cut short or the chat was left.
     if (chat.id === chatId && !stoppedByUser && !interrupted) {
-      if (!chat.titled && chat.messages.length >= 2) queueSideJob(chatId, { title: true });
+      if (!chat.titled && !chat.incognito && chat.messages.length >= 2) queueSideJob(chatId, { title: true });
       send(queued);
       return;
     }
     app.set({ draft: queued });
   }
-  if (chat.id === chatId) {
+  // An incognito chat is never named and never feeds memories.
+  if (chat.id === chatId && !chat.incognito) {
     if (!chat.titled && chat.messages.length >= 2) queueSideJob(chatId, { title: true });
     if (userText && !stoppedByUser && !interrupted) queueSideJob(chatId, { fact: userText });
-    if (usedTokens(chat, settings, memories) < 900) flushSideJobs();
+    if (usedTokens(chat, settings, memories, project) < 900) flushSideJobs();
   }
 }
 
-export async function send(text: string) {
+export async function send(text: string, photo: string | null = null) {
   const remember = text.match(/^\/remember\s+([\s\S]+)/i);
   if (remember) {
     const next = addMemory(app.get().memories, remember[1]);
@@ -495,17 +532,26 @@ export async function send(text: string) {
     return;
   }
   const chat = app.get().chat;
+  // A freshly picked photo is copied into the app's storage. An incognito chat leaves no copy.
+  const fresh = !!photo && /^(file|blob|data|https?):/.test(photo);
+  const image = photo && fresh && !chat.incognito ? await keepImage(photo) : photo ?? undefined;
   await saveChat({
     ...chat,
-    title: chat.messages.length ? chat.title : text.replace(/\s+/g, ' ').slice(0, 48),
-    messages: [...chat.messages, { id: newId(), role: 'user', content: text }],
+    title: chat.messages.length ? chat.title : (text || 'Photo').replace(/\s+/g, ' ').slice(0, 48),
+    messages: [...chat.messages, { id: newId(), role: 'user', content: text, image }],
   });
   runTurn(text);
 }
 
+/** Lets the user pick a photo to send with their next message. */
+export async function attachPhoto() {
+  const uri = await pickImage().catch(() => null);
+  if (uri) app.set({ attachment: uri });
+}
+
 /** The send button: sends the draft, queues it, or stops the reply being written. */
 export function submit() {
-  const { busy, draft, engine: state } = app.get();
+  const { busy, draft, attachment, engine: state } = app.get();
   const text = draft.trim();
   if (busy) {
     // With something typed, line it up for after this reply. With nothing typed, stop.
@@ -517,10 +563,10 @@ export function submit() {
     }
     return;
   }
-  if (!text || state.status !== 'ready') return;
+  if ((!text && !attachment) || state.status !== 'ready') return;
   haptic();
-  app.set({ draft: '' });
-  send(text);
+  app.set({ draft: '', attachment: null });
+  send(text, attachment);
 }
 
 export function stop() {
@@ -538,38 +584,45 @@ export async function regenerate() {
   runTurn(null);
 }
 
-/** Takes the last question back into the message box so it can be changed. */
-export async function editLast() {
+/**
+ * Takes one of the user's messages back into the message box so it can be
+ * changed. That message and everything after it leave the chat.
+ */
+export async function editMessage(id: string | undefined) {
   const { chat, busy } = app.get();
-  const index = chat.messages.map((m) => m.role).lastIndexOf('user');
-  if (busy || index < 0) return;
+  const found = id ? chat.messages.findIndex((m) => m.id === id) : -1;
+  const index = found >= 0 ? found : chat.messages.map((m) => m.role).lastIndexOf('user');
+  if (busy || index < 0 || chat.messages[index].role !== 'user') return;
   haptic();
-  app.set({ draft: chat.messages[index].content });
+  app.set({ draft: chat.messages[index].content, attachment: chat.messages[index].image ?? null });
   const messages = chat.messages.slice(0, index);
   if (messages.length) {
     await saveChat({ ...chat, messages, ctx: null, cut: Math.min(chat.cut, messages.length) });
   } else {
-    const chatList = await store.deleteChat(chat.id);
-    app.set({ chatList, chat: blankChat() });
+    const chatList = chat.incognito ? app.get().chatList : await store.deleteChat(chat.id);
+    app.set({ chatList, chat: blankChat({ projectId: chat.projectId, incognito: chat.incognito }) });
   }
 }
 
-export async function openChat(id: string | null) {
+export async function openChat(id: string | null, fresh: { projectId?: string; incognito?: boolean } = {}) {
   const { busy, chat } = app.get();
   if (id === chat.id) return;
   if (busy) stop();
   Speech.stop().catch(() => {});
-  const next = (id && (await store.chat(id))) || blankChat();
-  app.set({ chat: next, draft: '', queued: '', speakingId: null });
+  const next = (id && (await store.chat(id))) || blankChat(fresh);
+  app.set({ chat: next, draft: '', queued: '', attachment: null, speakingId: null });
   // The chat just left no longer needs the model's attention. Catch up now.
   flushSideJobs();
 }
 
-export const newChat = () => {
-  if (!app.get().chat.messages.length) return;
+/** Starts a new chat, optionally inside a project or as an incognito chat. */
+export function newChat(options: { projectId?: string; incognito?: boolean } = {}) {
+  const { chat } = app.get();
+  const same = !chat.messages.length && chat.projectId === options.projectId && !!chat.incognito === !!options.incognito;
+  if (same) return;
   haptic();
-  openChat(null);
-};
+  openChat(null, options);
+}
 
 export function removeChat(meta: ChatMeta) {
   Alert.alert('Delete this chat?', meta.title, [
@@ -578,6 +631,8 @@ export function removeChat(meta: ChatMeta) {
       text: 'Delete', style: 'destructive',
       onPress: async () => {
         sideJobs = sideJobs.filter((j) => j.chatId !== meta.id);
+        const gone = await store.chat(meta.id);
+        deleteImages((gone?.messages ?? []).map((m) => m.image));
         const chatList = await store.deleteChat(meta.id);
         app.set({ chatList });
         if (app.get().chat.id === meta.id) openChat(null);
@@ -620,9 +675,52 @@ export async function summariseNow() {
   app.set({ busy: false, status: '' });
 }
 
-/** How full the model's context is for the open chat, as tokens. */
-export const contextUse = (chat: Chat, settings: Settings, memories: Memory[]) =>
-  usedTokens(chat, settings, memories);
+// ---------- projects ----------
+
+export function createProject(name: string): Project | null {
+  const clean = name.replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (!clean) return null;
+  const project: Project = { id: newId(), name: clean, instructions: '' };
+  app.set((s) => ({ projects: [project, ...s.projects] }));
+  store.saveProject(project);
+  haptic('success');
+  return project;
+}
+
+export function updateProject(id: string, patch: Partial<Pick<Project, 'name' | 'instructions'>>) {
+  const current = findProject(id);
+  if (!current) return;
+  const next = { ...current, ...patch };
+  app.set((s) => ({ projects: s.projects.map((p) => (p.id === id ? next : p)) }));
+  store.saveProject(next);
+}
+
+export function deleteProject(project: Project, then?: () => void) {
+  Alert.alert(`Delete ${project.name}?`, 'Its chats are kept.', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Delete', style: 'destructive',
+      onPress: async () => {
+        const chatList = await store.deleteProject(project.id);
+        app.set((s) => ({
+          chatList,
+          projects: s.projects.filter((p) => p.id !== project.id),
+          ...(s.chat.projectId === project.id ? { chat: { ...s.chat, projectId: undefined } } : {}),
+        }));
+        then?.();
+      },
+    },
+  ]);
+}
+
+/** Puts a chat in a project, or takes it out when `projectId` is null. */
+export async function moveChat(id: string, projectId: string | null) {
+  const chatList = await store.updateChat(id, { projectId });
+  app.set((s) => ({
+    chatList,
+    ...(s.chat.id === id ? { chat: { ...s.chat, projectId: projectId ?? undefined } } : {}),
+  }));
+}
 
 // ---------- message actions ----------
 
@@ -680,6 +778,7 @@ export function deleteAllChats() {
       onPress: async () => {
         sideJobs = [];
         await store.deleteAllChats();
+        deleteAllImages();
         app.set({ chatList: [], chat: blankChat(), draft: '' });
       },
     },

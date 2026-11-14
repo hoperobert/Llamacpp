@@ -8,7 +8,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { app, haptic, openChat, removeChat, renameChat, shareChat, togglePin } from '../lib/app';
+import {
+  app, haptic, moveChat, newChat, openChat, removeChat, renameChat, shareChat, togglePin,
+} from '../lib/app';
 import { dayGroup } from '../lib/format';
 import { store, type ChatMeta } from '../lib/storage';
 import { Icon, type IconName } from '../ui/Icon';
@@ -25,6 +27,7 @@ export default function ChatsMenu() {
 
   const chatList = app.use((s) => s.chatList);
   const currentId = app.use((s) => s.chat.id);
+  const projects = app.use((s) => s.projects);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Item[]>([]);
   const [slide] = useState(() => new Animated.Value(0));
@@ -74,27 +77,47 @@ export default function ChatsMenu() {
       .map(([title, data]) => ({ title, data }));
   }, [chatList, searching, results]);
 
-  const open = async (id: string | null) => {
+  const open = async (id: string) => {
     haptic('select');
     await openChat(id);
     close();
   };
 
+  const start = (options: { incognito?: boolean } = {}) => {
+    newChat(options);
+    close();
+  };
+
+  const move = (item: ChatMeta) => {
+    const choices = projects.filter((p) => p.id !== item.projectId);
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: 'Move to Project',
+        options: [...choices.map((p) => p.name), ...(item.projectId ? ['No Project'] : []), 'Cancel'],
+        cancelButtonIndex: choices.length + (item.projectId ? 1 : 0),
+      },
+      (index) => {
+        if (index < choices.length) moveChat(item.id, choices[index].id);
+        else if (item.projectId && index === choices.length) moveChat(item.id, null);
+      },
+    );
+  };
+
   const more = (item: ChatMeta) => {
     if (Platform.OS !== 'ios') return;
     haptic();
+    const canMove = projects.length > 0;
+    const options = ['Rename', item.pinned ? 'Unpin' : 'Pin', ...(canMove ? ['Move to Project…'] : []), 'Share…', 'Delete', 'Cancel'];
     ActionSheetIOS.showActionSheetWithOptions(
-      {
-        options: ['Rename', item.pinned ? 'Unpin' : 'Pin', 'Share…', 'Delete', 'Cancel'],
-        destructiveButtonIndex: 3,
-        cancelButtonIndex: 4,
-      },
+      { options, destructiveButtonIndex: options.length - 2, cancelButtonIndex: options.length - 1 },
       (index) => {
-        if (index === 0) {
+        const choice = options[index];
+        if (choice === 'Rename') {
           Alert.prompt('Rename Chat', undefined, (title) => renameChat(item.id, title), 'plain-text', item.title);
-        } else if (index === 1) togglePin(item);
-        else if (index === 2) shareChat(item.id);
-        else if (index === 3) removeChat(item);
+        } else if (choice === 'Pin' || choice === 'Unpin') togglePin(item);
+        else if (choice === 'Move to Project…') move(item);
+        else if (choice === 'Share…') shareChat(item.id);
+        else if (choice === 'Delete') removeChat(item);
       },
     );
   };
@@ -128,7 +151,9 @@ export default function ChatsMenu() {
           />
         </View>
 
-        <Link t={t} icon="plus.circle.fill" label="New chat" accent onPress={() => open(null)} />
+        <Link t={t} icon="plus.circle.fill" label="New chat" accent onPress={() => start()} />
+        <Link t={t} icon="eye.slash" label="Incognito chat" onPress={() => start({ incognito: true })} />
+        <Link t={t} icon="folder" label="Projects" onPress={() => close(() => router.push('/projects'))} />
 
         <SectionList
           sections={sections}

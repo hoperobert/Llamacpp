@@ -1,7 +1,7 @@
 // Prompt building, context handling and memories. No UI in here.
 
 import * as engine from './engine';
-import { newId, type Chat, type Memory, type Settings } from './storage';
+import { newId, STYLES, type Chat, type Memory, type Project, type Settings } from './storage';
 
 export const KEEP_RECENT = 4;        // messages left untouched when a chat is compacted
 const MAX_MEMORIES = 40;
@@ -9,13 +9,18 @@ const MEMORY_PROMPT_CHARS = 1500;
 
 export const estimateTokens = (text: string) => Math.ceil(text.length / 3) + 6;
 
-export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[]): string {
+export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[], project?: Project): string {
   const parts = [
     "You are a helpful assistant running privately on the user's own device. " +
       `Keep answers clear and concise. Today is ${new Date().toDateString()}.`,
   ];
+  const style = STYLES.find((s) => s.id === settings.style)?.prompt;
+  if (style) parts.push(style);
   if (settings.instructions.trim()) {
     parts.push(`Follow these instructions from the user:\n${settings.instructions.trim()}`);
+  }
+  if (project?.instructions.trim()) {
+    parts.push(`This chat is part of the project "${project.name}". Follow its instructions:\n${project.instructions.trim()}`);
   }
   if (settings.memoryOn && memories.length) {
     const lines: string[] = [];
@@ -35,21 +40,21 @@ export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[])
   return parts.join('\n\n');
 }
 
-export function promptMessages(chat: Chat, settings: Settings, memories: Memory[]) {
+export function promptMessages(chat: Chat, settings: Settings, memories: Memory[], project?: Project) {
   return [
-    { role: 'system' as const, content: systemPrompt(chat, settings, memories) },
-    ...chat.messages.slice(chat.cut).filter((m) => m.content)
-      .map(({ role, content }) => ({ role, content })),
+    { role: 'system' as const, content: systemPrompt(chat, settings, memories, project), image: undefined },
+    ...chat.messages.slice(chat.cut).filter((m) => m.content || m.image)
+      .map(({ role, content, image }) => ({ role, content, image })),
   ];
 }
 
 /** Tokens the chat occupies. Measured where possible, otherwise estimated. */
-export function usedTokens(chat: Chat, settings: Settings, memories: Memory[]): number {
+export function usedTokens(chat: Chat, settings: Settings, memories: Memory[], project?: Project): number {
   if (chat.ctx && chat.ctx.cut === chat.cut && chat.ctx.count <= chat.messages.length) {
     const added = chat.messages.slice(chat.ctx.count);
     return chat.ctx.used + added.reduce((n, m) => n + estimateTokens(m.content), 0);
   }
-  return estimateTokens(systemPrompt(chat, settings, memories)) +
+  return estimateTokens(systemPrompt(chat, settings, memories, project)) +
     chat.messages.slice(chat.cut).reduce((n, m) => n + estimateTokens(m.content), 0);
 }
 
@@ -93,11 +98,13 @@ export async function compact(chat: Chat, settings: Settings, keep = KEEP_RECENT
   return { ...chat, summary, cut: end, ctx: null };
 }
 
-export async function ensureRoom(chat: Chat, settings: Settings, memories: Memory[]): Promise<Chat> {
+export async function ensureRoom(
+  chat: Chat, settings: Settings, memories: Memory[], project?: Project,
+): Promise<Chat> {
   const limit = settings.nCtx - replyBudget(settings) - 48;
   let current = chat;
   let keep = KEEP_RECENT;
-  for (let i = 0; i < 4 && usedTokens(current, settings, memories) > limit; i++) {
+  for (let i = 0; i < 4 && usedTokens(current, settings, memories, project) > limit; i++) {
     const next = await compact(current, settings, keep);
     if (!next) break;
     current = next;

@@ -56,8 +56,13 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   file. Ones too big for the iPhone are not offered.
 - **Downloads** carry on in the background, show speed and time remaining,
   restart themselves after an app update, and ask before using mobile data.
-- **Thinking** can be switched on from the message box, and the reasoning is
-  folded away under the reply.
+- **Thinking**, a reply **style** (Normal, Concise, Explain, Formal) and reply
+  length are set from the "+" in the message box.
+- **Photos** can be sent to models that can look at them (Qwen3.5 2B and 4B,
+  Gemma 4 E2B) after a one-off add-on download for that model.
+- **Projects** group chats that share instructions.
+- **Incognito chats** are never saved, named or used for memories.
+- **Any message** you sent can be taken back and changed.
 - **Memories** and **custom instructions** carry across chats.
 - **Storage** is a SQLite database on the device, so searching chats does not
   mean reading them all into memory.
@@ -103,13 +108,14 @@ script and that setting.
 
 | Path | Purpose |
 |---|---|
-| `src/app/` | The screens: chat (`index`), chat list, model library, settings. |
+| `src/app/` | The screens: chat (`index`), side menu, reply options, models, projects, settings. |
 | `src/lib/app.ts` | The app's state and everything it can do. |
 | `src/lib/engine.ts` | Loading models and generating text through llama.rn. |
 | `src/lib/downloads.ts` | Background model downloads that survive the app closing. |
 | `src/lib/logic.ts` | Prompt building, context compaction, titles and memories. |
 | `src/lib/models.ts` | The model catalogue and how well each suits a device. |
-| `src/lib/db.ts` | The SQLite database: chats, messages and memories. |
+| `src/lib/db.ts` | The SQLite database: chats, messages, projects and memories. |
+| `src/lib/images.ts` | Photos attached to messages. |
 | `src/lib/storage.ts` | Settings and other small preferences. |
 | `src/ui/` | Shared pieces: messages, the message box, lists, Markdown, icons. |
 

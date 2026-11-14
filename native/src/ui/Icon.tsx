@@ -48,6 +48,12 @@ const SYMBOLS = {
   'magnifyingglass': 'search',
   'gearshape': 'settings',
   'plus.circle.fill': 'add_circle',
+  'eye.slash': 'visibility_off',
+  'xmark': 'close',
+  'photo': 'image',
+  'line.3.horizontal': 'menu',
+  'folder': 'folder',
+  'folder.badge.plus': 'create_new_folder',
 } as const;
 
 export type IconName = keyof typeof SYMBOLS;

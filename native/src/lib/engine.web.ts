@@ -4,7 +4,7 @@
 
 export const engineVersion = 'preview';
 
-type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string; image?: string };
 export type Timings = { used: number; speed: number; thought: number };
 
 let loaded = false;
@@ -36,14 +36,16 @@ def immune(memory, germ):
 
 Read more at https://example.com or use \`inline code\`.`;
 
-export async function loadModel(_uri: string, _nCtx: number, onProgress: (fraction: number) => void) {
+export async function loadModel(
+  _uri: string, _nCtx: number, onProgress: (fraction: number) => void, projectorUri?: string,
+) {
   loaded = false;
   for (let i = 1; i <= 10; i++) {
     await wait(120);
     onProgress(i / 10);
   }
   loaded = true;
-  return { gpu: false };
+  return { gpu: false, vision: !!projectorUri };
 }
 
 export async function unloadModel() { loaded = false; }

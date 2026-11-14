@@ -2,10 +2,12 @@
 // shown, and changed, from here.
 
 import React, { useEffect, useState } from 'react';
-import { Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { app, changeSettings, findModel, haptic, submit } from '../lib/app';
+import { app, findModel, haptic, submit } from '../lib/app';
+import { imageUri } from '../lib/images';
+import { STYLES } from '../lib/storage';
 import { Glass } from './Glass';
 import { Icon } from './Icon';
 import type { Theme } from './theme';
@@ -28,11 +30,16 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   const busy = app.use((s) => s.busy);
   const status = app.use((s) => s.status);
   const queued = app.use((s) => s.queued);
+  const attachment = app.use((s) => s.attachment);
   const engine = app.use((s) => s.engine);
   const thinking = app.use((s) => s.settings.thinking);
+  const styleId = app.use((s) => s.settings.style);
+  // What is switched on, shown quietly next to the model's name.
+  const extras = [thinking ? 'Think' : '', styleId !== 'normal' ? STYLES.find((s) => s.id === styleId)?.label : '']
+    .filter(Boolean).join(' · ');
 
   const ready = engine.status === 'ready';
-  const typed = !!draft.trim();
+  const typed = !!draft.trim() || !!attachment;
   const canSend = busy || (ready && typed);
   // While a reply is being written the button stops it, unless there is something to queue.
   const stops = busy && !typed;
@@ -61,6 +68,20 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
         </Pressable>
       )}
       <Glass c={t.c} style={styles.box}>
+        {!!attachment && (
+          <View style={styles.photo}>
+            <Image source={{ uri: imageUri(attachment) }} style={styles.photoImage} />
+            <Pressable
+              onPress={() => app.set({ attachment: null })}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Remove photo"
+              style={[styles.photoRemove, { backgroundColor: t.c.text }]}
+            >
+              <Icon name="xmark" size={10} color={t.c.bg} weight="bold" />
+            </Pressable>
+          </View>
+        )}
         <TextInput
           value={draft}
           onChangeText={(text) => app.set({ draft: text })}
@@ -75,20 +96,13 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
         />
         <View style={styles.bar}>
           <Pressable
-            onPress={() => { haptic('select'); changeSettings({ thinking: !thinking }); }}
+            onPress={() => { haptic(); router.push('/options'); }}
             hitSlop={4}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: thinking }}
-            accessibilityLabel="Think before answering"
-            style={({ pressed }) => [
-              styles.round, { backgroundColor: thinking ? t.c.accent : chip }, pressed && styles.dim,
-            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Reply options"
+            style={({ pressed }) => [styles.round, { backgroundColor: chip }, pressed && styles.dim]}
           >
-            <Icon
-              name={thinking ? 'lightbulb.fill' : 'lightbulb'}
-              size={19}
-              color={thinking ? t.c.onAccent : t.c.text}
-            />
+            <Icon name="plus" size={20} color={t.c.text} />
           </Pressable>
           <Pressable
             onPress={() => router.push('/models')}
@@ -99,7 +113,7 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
           >
             <Text numberOfLines={1} style={[styles.modelText, { color: t.c.text }]}>
               {modelLabel}
-              {thinking && ready && <Text style={{ color: t.c.secondary, fontWeight: '400' }}>  Think</Text>}
+              {!!extras && ready && <Text style={{ color: t.c.secondary, fontWeight: '400' }}>  {extras}</Text>}
             </Text>
           </Pressable>
           <View style={styles.flex} />
@@ -131,6 +145,12 @@ const styles = StyleSheet.create({
   status: { fontSize: 13, marginBottom: 8, marginLeft: 16 },
   queued: { marginBottom: 8, marginHorizontal: 16 },
   queuedText: { fontSize: 14 },
+  photo: { alignSelf: 'flex-start', marginLeft: 6, marginTop: 4, marginBottom: 4 },
+  photoImage: { width: 64, height: 64, borderRadius: 14 },
+  photoRemove: {
+    position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+  },
   box: { borderRadius: 30, borderCurve: 'continuous', padding: 10 },
   input: { maxHeight: 150, minHeight: 40, paddingTop: 8, paddingBottom: 8, paddingHorizontal: 8 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
