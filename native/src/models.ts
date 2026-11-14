@@ -19,6 +19,14 @@ export const MODELS: Model[] = [
     url: 'https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf',
   },
   {
+    id: 'lfm3-1.7b',
+    name: 'LFM3 1.7B',
+    note: 'Newer (Oct 2026) and built for phones. Fast for its quality.',
+    sizeMB: 1100,
+    file: 'LFM3-1.7B-Q4_K_M.gguf',
+    url: 'https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf',
+  },
+  {
     id: 'qwen35-2b',
     name: 'Qwen3.5 2B',
     note: 'A good balance of speed and quality.',
@@ -41,6 +49,22 @@ export const MODELS: Model[] = [
     sizeMB: 3032,
     file: 'Qwen3.5-4B-Q4_K_M.gguf',
     url: 'https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf',
+  },
+  {
+    id: 'gemma4-e4b',
+    name: 'Gemma 4 E4B',
+    note: 'A step up from E2B. Needs an iPhone with 12 GB of memory.',
+    sizeMB: 4591,
+    file: 'gemma-4-E4B-it-Q4_0.gguf',
+    url: 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_0.gguf',
+  },
+  {
+    id: 'qwen35-9b',
+    name: 'Qwen3.5 9B',
+    note: 'The most capable here. Only for iPhones with 12 GB of memory, and slow.',
+    sizeMB: 5379,
+    file: 'Qwen3.5-9B-Q4_0.gguf',
+    url: 'https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_0.gguf',
   },
 ];
 

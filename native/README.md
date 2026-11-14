@@ -8,8 +8,8 @@ things a browser cannot offer:
   background, the phone is locked, or the app is closed.
 - **More memory.** No browser tab limit, so loading does not crash the way it
   can in Safari or Chrome.
-- **Bigger models.** No 2 GB file limit, so Gemma 4 E2B and Qwen3.5 4B are
-  offered alongside the small ones.
+- **Bigger models.** No 2 GB file limit, so models up to Gemma 4 E4B and
+  Qwen3.5 9B are offered alongside the small ones.
 
 It runs llama.cpp natively on the GPU (Metal) through
 [llama.rn](https://github.com/mybigday/llama.rn).

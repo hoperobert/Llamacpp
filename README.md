@@ -31,6 +31,7 @@ true background downloads and room for bigger models.
 | Model | Download | Notes |
 |---|---|---|
 | Qwen3.5 0.8B (Q4_0) | 563 MB | Default. Fastest. |
+| LFM3 1.7B (Q4_K_M) | 1.1 GB | Newer, built for phones. |
 | Qwen3.5 2B (Q4_K_M) | 1.3 GB | Smarter, slower, needs more memory. |
 
 To try another model, add `?model=<url of a .gguf file>` to the page address.

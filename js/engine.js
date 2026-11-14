@@ -12,6 +12,13 @@ export const MODELS = [
     url: 'https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf',
   },
   {
+    id: 'lfm3-1.7b',
+    name: 'LFM3 1.7B',
+    note: 'Newer (Oct 2026) and built for phones. Fast for its quality.',
+    sizeMB: 1100,
+    url: 'https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf',
+  },
+  {
     id: 'qwen35-2b',
     name: 'Qwen3.5 2B',
     note: 'Smarter, slower. Needs a recent Pro-class phone.',
