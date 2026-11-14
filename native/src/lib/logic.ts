@@ -106,6 +106,29 @@ export async function ensureRoom(chat: Chat, settings: Settings, memories: Memor
   return current;
 }
 
+// ---------- titles ----------
+
+/** Asks the model for a short title for a chat. Returns '' if it has nothing usable. */
+export async function suggestTitle(chat: Chat): Promise<string> {
+  const user = chat.messages.find((m) => m.role === 'user')?.content ?? '';
+  const reply = chat.messages.find((m) => m.role === 'assistant')?.content ?? '';
+  if (!user) return '';
+  try {
+    const raw = await engine.complete([
+      {
+        role: 'system',
+        content: 'You name conversations. Reply with a title of two to five words and nothing else. ' +
+          'No quotes, no full stop.',
+      },
+      { role: 'user', content: `User: ${user.slice(0, 400)}\n\nAssistant: ${reply.slice(0, 400)}\n\nTitle:` },
+    ], { maxTokens: 16 });
+    const title = raw.split('\n')[0].replace(/^title:\s*/i, '').replace(/^["'“‘*#\s]+|["'”’*.\s]+$/g, '').trim();
+    return title.length >= 3 && title.length <= 60 ? title : '';
+  } catch {
+    return '';
+  }
+}
+
 // ---------- memories ----------
 
 // Only messages that look like they contain a personal fact are checked,
