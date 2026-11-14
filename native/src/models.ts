@@ -83,6 +83,14 @@ export const MODELS: Model[] = [
     url: 'https://huggingface.co/XHToken/Spark-X2.6-4B-GGUF/resolve/main/Spark-X2.6-4B-Q4_K_M.gguf',
   },
   {
+    id: 'dory10-4b',
+    name: 'Nemotron Dory 1.0 4B',
+    note: 'NVIDIA research model that re-reads its own work for better answers. Slow. English only. Needs 8 GB of memory or more.',
+    sizeMB: 3673,
+    file: 'NVIDIA-Nemotron-Labs-Dory1.0-4B-Q5_K_M.gguf',
+    url: 'https://huggingface.co/nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-GGUF/resolve/main/NVIDIA-Nemotron-Labs-Dory1.0-4B-Q5_K_M.gguf',
+  },
+  {
     id: 'gemma4-e4b',
     name: 'Gemma 4 E4B',
     note: 'A step up from E2B. Needs an iPhone with 12 GB of memory.',

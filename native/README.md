@@ -51,6 +51,17 @@ The code type-checks and bundles, and the generated iOS project picks up the
 background download hook and the increased-memory entitlements. It has not yet
 been run on a device, so expect a round of fixes after the first build.
 
+## Dory support
+
+Nemotron Dory uses a model format that llama.cpp has not released support for
+yet. `patches/llama.rn+0.13.0-rc.11.patch` adds it (ported from llama.cpp pull
+request 30306) and is applied on every `npm install`. Because of the patch,
+`eas.json` sets `RNLLAMA_BUILD_FROM_SOURCE=1` so the engine is compiled during
+the build instead of using the prebuilt one.
+
+When llama.rn ships Dory support itself, delete the patch, the `postinstall`
+script and that setting.
+
 ## Code map
 
 | File | Purpose |

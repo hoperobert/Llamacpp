@@ -8,12 +8,18 @@
       "distribution": "internal",
       "ios": {
         "image": "latest"
+      },
+      "env": {
+        "RNLLAMA_BUILD_FROM_SOURCE": "1"
       }
     },
     "production": {
       "autoIncrement": true,
       "ios": {
         "image": "latest"
+      },
+      "env": {
+        "RNLLAMA_BUILD_FROM_SOURCE": "1"
       }
     }
   },
