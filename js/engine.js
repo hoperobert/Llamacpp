@@ -43,8 +43,48 @@ const LOG_LIMIT = 400;
 const logLines = [];
 let lastActivity = performance.now();
 
+// ---------- crash detection ----------
+//
+// Loading a model can exhaust the browser's memory, which kills the page
+// outright with no error to catch. So a marker is written while a load is in
+// flight; finding it at the next start means the last load took the page down.
+
+const CRASH_KEY = 'pocket-llm-loading';
+const LOG_KEY = 'pocket-llm-last-log';
+
+const storage = {
+  get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+  set(key, value) { try { localStorage.setItem(key, value); } catch (e) { /* private mode */ } },
+  remove(key) { try { localStorage.removeItem(key); } catch (e) { /* private mode */ } },
+};
+
+/** The load that was in flight when the page last died: { gpu, single, nCtx }, or null. */
+export const previousCrash = (() => {
+  try {
+    const value = JSON.parse(storage.get(CRASH_KEY));
+    storage.remove(CRASH_KEY);
+    return value;
+  } catch (e) {
+    return null;
+  }
+})();
+const previousLog = previousCrash ? storage.get(LOG_KEY) || '' : '';
+
+// Closing the app mid-load is not a crash.
+addEventListener('pagehide', () => storage.remove(CRASH_KEY));
+
+export const modeKey = (mode) => `${mode.gpu ? 'gpu' : 'cpu'}-${mode.single ? 'single' : 'multi'}`;
+
+let loadInFlight = false;
+let lastLogSave = 0;
+
 function record(level, args) {
   lastActivity = performance.now();
+  // Keep the tail of the log on disk during a load, so it survives a crash.
+  if (loadInFlight && performance.now() - lastLogSave > 400) {
+    lastLogSave = performance.now();
+    queueMicrotask(() => storage.set(LOG_KEY, logLines.slice(-80).join('\n')));
+  }
   const text = args.map((a) => (a instanceof Error ? `${a.message}\n${a.stack || ''}` : String(a))).join(' ');
   logLines.push(`${(performance.now() / 1000).toFixed(1)}s ${level} ${text.slice(0, 500)}`);
   if (logLines.length > LOG_LIMIT) logLines.shift();
@@ -68,6 +108,9 @@ export function diagnostics() {
       ` | Memory hint: ${navigator.deviceMemory ?? 'n/a'} GB | Online: ${navigator.onLine}`,
     '',
     ...logLines,
+    ...(previousCrash
+      ? ['', `--- Previous session crashed while loading (${modeKey(previousCrash)}, context ${previousCrash.nCtx}) ---`, previousLog]
+      : []),
   ].join('\n');
 }
 
@@ -112,7 +155,7 @@ const modeLabel = (mode) =>
  * Ways to load a model, most capable first. Some devices hang or crash on
  * the faster ones (iOS in particular), so load() works down the list.
  */
-function loadModes(wantGpu, preferred) {
+function loadModes(wantGpu, preferred, bad = []) {
   const modes = [];
   const gpu = wantGpu && !!navigator.gpu;
   if (gpu && !isIOS) modes.push({ gpu: true, single: false });
@@ -123,7 +166,10 @@ function loadModes(wantGpu, preferred) {
     const i = modes.findIndex((m) => m.gpu === preferred.gpu && m.single === preferred.single);
     if (i > 0) modes.unshift(...modes.splice(i, 1));
   }
-  return modes;
+  // Skip modes that crashed the page before. If every mode has, keep the
+  // lightest one so the user can still try (for example with less context).
+  const usable = modes.filter((m) => !bad.includes(modeKey(m)));
+  return usable.length ? usable : modes.slice(-1);
 }
 
 export class Engine {
@@ -155,7 +201,7 @@ export class Engine {
    * modes if one fails or hangs. `onProgress` gets { phase, fraction, mode }.
    * Resolves with the mode that worked.
    */
-  async load(model, { nCtx, gpu, loadMode }, onProgress) {
+  async load(model, { nCtx, gpu, loadMode, badModes }, onProgress) {
     await this.unload();
     // Ask the browser not to evict the model when storage runs low.
     try { await navigator.storage?.persist?.(); } catch (e) { /* optional */ }
@@ -175,7 +221,7 @@ export class Engine {
       if (!stored) throw new Error('The download finished but the file could not be opened.');
     }
 
-    const modes = loadModes(gpu, loadMode);
+    const modes = loadModes(gpu, loadMode, badModes);
     let lastError = null;
     for (let i = 0; i < modes.length; i++) {
       const mode = modes[i];
@@ -282,6 +328,8 @@ export class Engine {
     });
 
     lastActivity = performance.now();
+    loadInFlight = true;
+    storage.set(CRASH_KEY, JSON.stringify({ ...mode, nCtx, at: Date.now() }));
     let watchdog;
     const stalled = new Promise((_, reject) => {
       watchdog = setInterval(() => {
@@ -296,6 +344,8 @@ export class Engine {
           n_ctx: nCtx,
           ...(mode.gpu ? {} : { n_gpu_layers: 0 }),
           ...(mode.single ? { n_threads: 1 } : {}),
+          // A smaller batch needs smaller working buffers. Phones have little to spare.
+          ...(isIOS ? { n_batch: 512 } : {}),
         }),
         stalled,
       ]);
@@ -305,6 +355,8 @@ export class Engine {
       throw e;
     } finally {
       clearInterval(watchdog);
+      loadInFlight = false;
+      storage.remove(CRASH_KEY);
     }
   }
 

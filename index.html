@@ -49,7 +49,11 @@
           <li>Works offline once a model is downloaded.</li>
           <li>No account and no cost.</li>
         </ul>
-        <h3>Pick a model to download</h3>
+        <div id="crashNote" class="note warn" hidden>
+          <span id="crashText"></span>
+          <button id="crashCopy" class="text-btn" type="button">Copy diagnostics</button>
+        </div>
+        <h3>Pick a model</h3>
         <div id="onboardModels" class="models"></div>
         <p id="installHint" class="note" hidden>
           To keep it working offline, tap <strong>Share</strong> then

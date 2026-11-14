@@ -1,4 +1,4 @@
-import { Engine, MODELS, diagnostics } from './engine.js';
+import { Engine, MODELS, diagnostics, isIOS, previousCrash, modeKey } from './engine.js';
 import { store, newId } from './store.js';
 import { renderMarkdown } from './markdown.js';
 
@@ -7,11 +7,12 @@ const DEFAULTS = {
   instructions: '',
   temperature: 0.7,
   maxTokens: 768,
-  nCtx: 4096,
+  nCtx: isIOS ? 2048 : 4096,   // phones have far less memory to spare
   thinking: false,
   gpu: true,
   pendingModelId: null,   // a download to resume when the app next opens
-  loadMode: null,   // the load mode that last worked on this device
+  loadMode: null,
+  badModes: [],     // load modes that crashed the browser on this device   // the load mode that last worked on this device
   memoryOn: true,
   autoMemory: true,
   autoSummary: true,
@@ -948,9 +949,12 @@ function setupSettings() {
   });
   bindSetting('setMaxTokens', 'maxTokens', { parse: Number });
   bindSetting('setThinking', 'thinking', { type: 'checked' });
-  bindSetting('setCtx', 'nCtx', { parse: Number, reload: true });
+  bindSetting('setCtx', 'nCtx', { parse: Number, reload: true, after: () => { settings.badModes = []; } });
   bindSetting('setAutoSummary', 'autoSummary', { type: 'checked' });
-  bindSetting('setGpu', 'gpu', { type: 'checked', reload: true, after: () => { settings.loadMode = null; } });
+  bindSetting('setGpu', 'gpu', {
+    type: 'checked', reload: true,
+    after: () => { settings.loadMode = null; settings.badModes = []; },
+  });
   bindSetting('setTheme', 'theme', { after: applyAppearance });
   bindSetting('setTextSize', 'textSize', { after: applyAppearance });
 
@@ -975,6 +979,7 @@ function setupSettings() {
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   });
   $('diagnosticsBtn').addEventListener('click', copyDiagnostics);
+  $('crashCopy').addEventListener('click', copyDiagnostics);
   $('deleteChatsBtn').addEventListener('click', async () => {
     if (!(await confirmDialog('Delete every chat? This cannot be undone.', 'Delete all'))) return;
     chats = [];
@@ -1162,6 +1167,8 @@ async function start() {
     console.warn('Storage unavailable, nothing will be saved', e);
   }
   if (!MODELS.some((m) => m.id === settings.modelId)) settings.modelId = MODELS[0].id;
+  // A phone that has never loaded a model successfully starts with the small context.
+  if (isIOS && !settings.loadMode && settings.nCtx > 2048) settings.nCtx = 2048;
   if (MODELS[0].id === 'custom') settings.modelId = 'custom';
 
   chat = blankChat();
@@ -1169,10 +1176,26 @@ async function start() {
   setupEvents();
   setupSettings();
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
   $('installHint').hidden = !(isIOS && !standalone);
+
+  if (previousCrash) {
+    // The last load took the whole page down, most likely by running out of
+    // memory. Avoid that mode from now on, and trim the context if even the
+    // lightest mode failed.
+    const key = modeKey(previousCrash);
+    if (!settings.badModes.includes(key)) settings.badModes.push(key);
+    if (settings.loadMode && modeKey(settings.loadMode) === key) settings.loadMode = null;
+    const lightest = !previousCrash.gpu && previousCrash.single;
+    if (lightest && settings.nCtx > 2048) settings.nCtx = 2048;
+    saveSettings();
+    $('crashText').textContent = lightest
+      ? 'The browser ran out of memory loading the model, even in its lightest mode. ' +
+        'Close other tabs and apps and try again, or this device may not have enough memory for it.'
+      : 'The browser ran out of memory loading the model last time. It will use a lighter mode now. ' +
+        'Closing other tabs and apps also helps.';
+    $('crashNote').hidden = false;
+  }
 
   await refreshCached();
   renderAll();
@@ -1180,11 +1203,15 @@ async function start() {
   registerServiceWorker();
 
   // Open ready to chat when the chosen model is already on the device.
-  // Otherwise pick up a download that was cut off last time.
+  // Otherwise pick up a download that was cut off last time. Only auto-load
+  // a model that has loaded successfully on this device before, and never
+  // straight after a crash: a load that kills the page would otherwise make
+  // the app impossible to open.
   const preferred = MODELS.find((m) => m.id === settings.modelId);
   const pending = MODELS.find((m) => m.id === settings.pendingModelId);
+  if (previousCrash) return;
   if (pending && !cached.has(pending.url)) loadModel(pending);
-  else if (preferred && cached.has(preferred.url)) loadModel(preferred);
+  else if (preferred && cached.has(preferred.url) && settings.loadMode) loadModel(preferred);
 }
 
 start();

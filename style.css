@@ -730,3 +730,6 @@ dialog[open] { animation: rise 0.2s ease-out; }
   header { padding-left: 20px; }
   .drawer-head { padding-top: 18px; padding-bottom: 14px; }
 }
+
+.note.warn { margin: 0 0 20px; border-color: var(--warn); }
+.note.warn .text-btn { display: block; padding: 6px 0 0; }
