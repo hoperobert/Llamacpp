@@ -23,23 +23,22 @@ It runs llama.cpp natively on the GPU (Metal) through
 
 ## Build and install
 
-From any computer with Node.js (Windows and Linux are fine):
+From a terminal, in the repository's top folder:
 
 ```sh
-cd native
-npm install
-npx eas-cli login
-npx eas-cli build --platform ios --profile production --auto-submit
+./build-ios.sh
 ```
+
+No computer is needed. On GitHub, open the repository, tap **Code →
+Codespaces → Create codespace**. That opens a terminal in the browser with
+everything installed, and the command above works there.
 
 The first run asks you to sign in to your Apple account and sets up the
 signing certificates for you. When it finishes, the build appears in
 TestFlight; install the TestFlight app on the iPhone and open it from there.
 
 The first build has to be started this way, from a terminal, because it
-signs you in to Apple and creates the project and signing certificates. If you
-have no computer, a GitHub Codespace (a terminal in the browser, opened from
-the repository's **Code** button) works for these commands.
+signs you in to Apple and creates the project and signing certificates.
 
 After that first build, Expo can build straight from GitHub: link the
 repository on expo.dev and set the base directory to `native`.
