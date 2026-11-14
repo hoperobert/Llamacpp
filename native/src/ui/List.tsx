@@ -69,11 +69,7 @@ export function SwitchRow({ t, title, subtitle, value, onChange }: {
       title={title}
       subtitle={subtitle}
       right={
-        <Switch
-          value={value}
-          trackColor={{ true: t.c.accent }}
-          onValueChange={(v) => { haptic('select'); onChange(v); }}
-        />
+        <Switch value={value} onValueChange={(v) => { haptic('select'); onChange(v); }} />
       }
     />
   );

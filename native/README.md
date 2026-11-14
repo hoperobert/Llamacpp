@@ -60,11 +60,12 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   folded away under the reply.
 - **Memories** (stored in SQLite) and **custom instructions** carry across
   chats.
-- **Replies** can be copied, shared, read aloud or asked for again.
+- **Replies** can be copied, shared, read aloud or asked for again. A message
+  typed while one is being written is queued and sent when it finishes.
 
 It uses the system's own navigation bars, sheets, menus and SF Symbols, and
 Liquid Glass for the message box on iOS 26 and later. The look is warm and
-quiet: a paper-like palette and one accent colour.
+quiet: a paper-like palette with black and white for emphasis.
 
 ## Being a good citizen on the phone
 

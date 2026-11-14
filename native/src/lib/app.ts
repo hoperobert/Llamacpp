@@ -50,6 +50,8 @@ type State = {
   live: Message | null;
   /** Text waiting in the message box. */
   draft: string;
+  /** A message typed while a reply was being written, to send when it finishes. */
+  queued: string;
   crashed: boolean;
   toast: string;
   speakingId: string | null;
@@ -71,6 +73,7 @@ export const app = createStore<State>({
   status: '',
   live: null,
   draft: '',
+  queued: '',
   crashed: false,
   toast: '',
   speakingId: null,
@@ -466,7 +469,17 @@ async function runTurn(userText: string | null) {
   if (!stoppedByUser && !interrupted) haptic('success');
 
   // Side jobs wait if the chat is long. See flushSideJobs.
-  const { chat, settings, memories } = app.get();
+  const { chat, settings, memories, queued } = app.get();
+  if (queued) {
+    app.set({ queued: '' });
+    // Send what was lined up, unless the reply was cut short or the chat was left.
+    if (chat.id === chatId && !stoppedByUser && !interrupted) {
+      if (!chat.titled && chat.messages.length >= 2) queueSideJob(chatId, { title: true });
+      send(queued);
+      return;
+    }
+    app.set({ draft: queued });
+  }
   if (chat.id === chatId) {
     if (!chat.titled && chat.messages.length >= 2) queueSideJob(chatId, { title: true });
     if (userText && !stoppedByUser && !interrupted) queueSideJob(chatId, { fact: userText });
@@ -490,14 +503,20 @@ export async function send(text: string) {
   runTurn(text);
 }
 
-/** The send button: sends the draft, or stops the reply being written. */
+/** The send button: sends the draft, queues it, or stops the reply being written. */
 export function submit() {
   const { busy, draft, engine: state } = app.get();
+  const text = draft.trim();
   if (busy) {
-    stop();
+    // With something typed, line it up for after this reply. With nothing typed, stop.
+    if (text) {
+      haptic();
+      app.set({ queued: text, draft: '' });
+    } else {
+      stop();
+    }
     return;
   }
-  const text = draft.trim();
   if (!text || state.status !== 'ready') return;
   haptic();
   app.set({ draft: '' });
@@ -541,7 +560,7 @@ export async function openChat(id: string | null) {
   if (busy) stop();
   Speech.stop().catch(() => {});
   const next = (id && (await store.chat(id))) || blankChat();
-  app.set({ chat: next, draft: '', speakingId: null });
+  app.set({ chat: next, draft: '', queued: '', speakingId: null });
   // The chat just left no longer needs the model's attention. Catch up now.
   flushSideJobs();
 }

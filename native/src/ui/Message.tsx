@@ -139,28 +139,21 @@ function Thinking({ t, message, streaming }: { t: Theme; message: Message; strea
   );
 }
 
-/** Three dots that pulse while the model reads the conversation. */
+/** A pulsing dot and a word, shown while the model reads the conversation. */
 function Dots({ t }: { t: Theme }) {
-  const [phase] = useState(() => new Animated.Value(0));
+  const [pulse] = useState(() => new Animated.Value(0.25));
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(phase, { toValue: 3, duration: 1100, useNativeDriver: true }),
-    );
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.25, duration: 600, useNativeDriver: true }),
+    ]));
     loop.start();
     return () => loop.stop();
-  }, [phase]);
+  }, [pulse]);
   return (
-    <View style={styles.dots} accessibilityLabel="Working">
-      {[0, 1, 2].map((i) => (
-        <Animated.View
-          key={i}
-          style={[
-            styles.dot,
-            { backgroundColor: t.c.accent },
-            { opacity: phase.interpolate({ inputRange: [i, i + 0.5, i + 1, 3], outputRange: [0.25, 1, 0.25, 0.25], extrapolate: 'clamp' }) },
-          ]}
-        />
-      ))}
+    <View style={styles.dots}>
+      <Animated.View style={[styles.dot, { backgroundColor: t.c.text, opacity: pulse }]} />
+      <Text style={[styles.working, { color: t.c.secondary }]}>Working…</Text>
     </View>
   );
 }
@@ -182,6 +175,7 @@ const styles = StyleSheet.create({
   thinkingHead: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
   thinkingLabel: { fontSize: 16 },
   thinkingText: { borderLeftWidth: 2, paddingLeft: 12 },
-  dots: { flexDirection: 'row', gap: 5, paddingVertical: 8 },
+  dots: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   dot: { width: 7, height: 7, borderRadius: 4 },
+  working: { fontSize: 16 },
 });

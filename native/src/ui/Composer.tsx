@@ -27,11 +27,15 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   const draft = app.use((s) => s.draft);
   const busy = app.use((s) => s.busy);
   const status = app.use((s) => s.status);
+  const queued = app.use((s) => s.queued);
   const engine = app.use((s) => s.engine);
   const thinking = app.use((s) => s.settings.thinking);
 
   const ready = engine.status === 'ready';
-  const canSend = busy || (ready && !!draft.trim());
+  const typed = !!draft.trim();
+  const canSend = busy || (ready && typed);
+  // While a reply is being written the button stops it, unless there is something to queue.
+  const stops = busy && !typed;
   const model = findModel(engine.modelId);
   const modelLabel = engine.status === 'loading'
     ? `Loading ${Math.round(engine.fraction * 100)}%`
@@ -46,13 +50,26 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
       pointerEvents="box-none"
     >
       {!!status && <Text style={[styles.status, { color: t.c.secondary }]}>{status}</Text>}
+      {!!queued && (
+        <Pressable
+          onPress={() => app.set({ queued: '', draft: queued })}
+          accessibilityRole="button"
+          accessibilityLabel="Queued message. Tap to edit"
+          style={styles.queued}
+        >
+          <Text numberOfLines={1} style={[styles.queuedText, { color: t.c.secondary }]}>Next: {queued}</Text>
+        </Pressable>
+      )}
       <Glass c={t.c} style={styles.box}>
         <TextInput
           value={draft}
           onChangeText={(text) => app.set({ draft: text })}
           multiline
           editable={engine.status !== 'none'}
-          placeholder={ready ? 'Ask anything' : engine.status === 'loading' ? 'Getting ready…' : 'Choose a model to start'}
+          placeholder={
+            busy ? 'Queue for after this reply…'
+            : ready ? 'Ask anything' : engine.status === 'loading' ? 'Getting ready…' : 'Choose a model to start'
+          }
           placeholderTextColor={t.c.tertiary}
           style={[styles.input, { color: t.c.text, fontSize: t.size }]}
         />
@@ -63,12 +80,14 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
             accessibilityRole="switch"
             accessibilityState={{ checked: thinking }}
             accessibilityLabel="Think before answering"
-            style={({ pressed }) => [styles.round, { backgroundColor: chip }, pressed && styles.dim]}
+            style={({ pressed }) => [
+              styles.round, { backgroundColor: thinking ? t.c.accent : chip }, pressed && styles.dim,
+            ]}
           >
             <Icon
               name={thinking ? 'lightbulb.fill' : 'lightbulb'}
               size={19}
-              color={thinking ? t.c.accent : t.c.text}
+              color={thinking ? t.c.onAccent : t.c.text}
             />
           </Pressable>
           <Pressable
@@ -89,13 +108,14 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
             disabled={!canSend}
             hitSlop={4}
             accessibilityRole="button"
-            accessibilityLabel={busy ? 'Stop' : 'Send'}
-            style={[styles.round, { backgroundColor: canSend ? t.c.accent : chip }]}
+            accessibilityLabel={stops ? 'Stop' : busy ? 'Queue' : 'Send'}
+            // Sending is the one filled button. Stopping is quiet, like the other controls.
+            style={[styles.round, { backgroundColor: canSend && !stops ? t.c.accent : chip }]}
           >
             <Icon
-              name={busy ? 'stop.fill' : 'arrow.up'}
-              size={busy ? 14 : 19}
-              color={canSend ? t.c.onAccent : t.c.tertiary}
+              name={stops ? 'stop.fill' : 'arrow.up'}
+              size={stops ? 15 : 19}
+              color={stops ? t.c.text : canSend ? t.c.onAccent : t.c.tertiary}
               weight="semibold"
             />
           </Pressable>
@@ -109,6 +129,8 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   wrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 10, paddingTop: 6 },
   status: { fontSize: 13, marginBottom: 8, marginLeft: 16 },
+  queued: { marginBottom: 8, marginHorizontal: 16 },
+  queuedText: { fontSize: 14 },
   box: { borderRadius: 30, borderCurve: 'continuous', padding: 10 },
   input: { maxHeight: 150, minHeight: 40, paddingTop: 8, paddingBottom: 8, paddingHorizontal: 8 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
