@@ -32,6 +32,8 @@ const tasks = new Map<string, DownloadTask>();
 const samples = new Map<string, { at: number; loaded: number; speed: number }>();
 let listener: Listener = () => {};
 let userPaused = new Set<string>();
+/** Downloads already restarted once after their link expired, so a real refusal is not retried forever. */
+const restarted = new Set<string>();
 
 const doneKey = (model: Model) => `downloaded:${model.id}`;
 const modelFile = (model: Model) => new File(Paths.document, model.file);
@@ -93,6 +95,7 @@ function looksComplete(model: Model): boolean {
 async function finish(model: Model) {
   tasks.delete(model.id);
   samples.delete(model.id);
+  restarted.delete(model.id);
   setUserPaused(model.id, false);
   if (looksComplete(model)) {
     await AsyncStorage.setItem(doneKey(model), '1');
@@ -130,9 +133,17 @@ function attach(model: Model, task: DownloadTask) {
       completeHandler(task.id);
       tasks.delete(model.id);
       samples.delete(model.id);
+      const text = String(error);
+      // A paused download remembers a signed link, and those stop working after
+      // a while. The server then refuses it. Start again from the real address.
+      if (/forbidden|expired|\b40[13]\b/i.test(text) && !restarted.has(model.id)) {
+        restarted.add(model.id);
+        task.stop().catch(() => {}).finally(() => startDownload(model, true));
+        return;
+      }
       listener(model.id, {
         status: 'failed', loaded: task.bytesDownloaded, total: totalOf(model, task), speed: 0,
-        error: friendlyError(String(error)),
+        error: friendlyError(text),
       }, false);
     });
 }
@@ -142,7 +153,8 @@ function friendlyError(error: string): string {
     return 'The connection dropped. Tap Retry when you are back online.';
   }
   if (/space|disk|storage/i.test(error)) return 'There is not enough free storage.';
-  if (/40[134]/.test(error)) return 'The file is no longer at that address.';
+  if (/forbidden|expired|\b40[13]\b/i.test(error)) return 'The download link expired. Tap Retry.';
+  if (/not found|\b404\b/i.test(error)) return 'The file is no longer at that address.';
   return error.replace(/^Error:\s*/, '').slice(0, 140);
 }
 
@@ -177,8 +189,9 @@ export async function restoreDownloads(models: Model[], onChange: Listener) {
   }
 }
 
-export function startDownload(model: Model) {
+export function startDownload(model: Model, automatic = false) {
   setUserPaused(model.id, false);
+  if (!automatic) restarted.delete(model.id);
   const existing = tasks.get(model.id);
   if (existing) {
     existing.resume().catch(() => {});
@@ -216,6 +229,7 @@ export async function deleteModel(model: Model) {
     tasks.delete(model.id);
   }
   samples.delete(model.id);
+  restarted.delete(model.id);
   setUserPaused(model.id, false);
   await AsyncStorage.removeItem(doneKey(model));
   try {
