@@ -99,7 +99,7 @@ export default function ChatScreen() {
             style={[styles.jump, { bottom: composerHeight + 8 }]}
           >
             <Glass c={t.c} interactive style={styles.jumpGlass}>
-              <Icon name="arrow.down" size={16} color={t.c.text} weight="semibold" />
+              <Icon name="arrow.down" size={18} color={t.c.text} weight="semibold" />
             </Glass>
           </Pressable>
         )}
@@ -193,42 +193,66 @@ function Header() {
 
   return (
     <>
-      <Stack.Screen options={{ title: hasMessages ? chat.title : '' }} />
+      <Stack.Screen options={{ headerTitle: () => <TitlePill onPress={hasMessages ? rename : undefined} /> }} />
       <Stack.Toolbar placement="left">
         <Stack.Toolbar.Button
-          icon="sidebar.left"
+          icon="line.3.horizontal"
           accessibilityLabel="Chats"
           onPress={() => router.push('/chats')}
         />
       </Stack.Toolbar>
       <Stack.Toolbar placement="right">
-        <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="More" hidden={!hasMessages}>
-          <Stack.Toolbar.MenuAction icon="gauge.with.dots.needle.33percent" onPress={showContext}>
+        <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="More">
+          <Stack.Toolbar.MenuAction icon="square.and.pencil" disabled={!hasMessages} onPress={newChat}>
+            New Chat
+          </Stack.Toolbar.MenuAction>
+          <Stack.Toolbar.MenuAction icon="gauge.with.dots.needle.33percent" hidden={!hasMessages} onPress={showContext}>
             {`Context ${percent}% Full`}
           </Stack.Toolbar.MenuAction>
           <Stack.Toolbar.Menu inline>
-            <Stack.Toolbar.MenuAction icon="square.and.arrow.up" onPress={() => shareChat(chat.id)}>
+            <Stack.Toolbar.MenuAction icon="square.and.arrow.up" hidden={!hasMessages} onPress={() => shareChat(chat.id)}>
               Share
             </Stack.Toolbar.MenuAction>
-            <Stack.Toolbar.MenuAction icon="pencil" onPress={rename}>
+            <Stack.Toolbar.MenuAction icon="pencil" hidden={!hasMessages} onPress={rename}>
               Rename
             </Stack.Toolbar.MenuAction>
-            <Stack.Toolbar.MenuAction icon={chat.pinned ? 'pin.slash' : 'pin'} onPress={() => togglePin(chat)}>
+            <Stack.Toolbar.MenuAction
+              icon={chat.pinned ? 'pin.slash' : 'pin'}
+              hidden={!hasMessages}
+              onPress={() => togglePin(chat)}
+            >
               {chat.pinned ? 'Unpin' : 'Pin'}
             </Stack.Toolbar.MenuAction>
-            <Stack.Toolbar.MenuAction icon="trash" destructive onPress={() => removeChat(chat)}>
+            <Stack.Toolbar.MenuAction icon="trash" destructive hidden={!hasMessages} onPress={() => removeChat(chat)}>
               Delete
             </Stack.Toolbar.MenuAction>
           </Stack.Toolbar.Menu>
+          <Stack.Toolbar.MenuAction icon="gearshape" onPress={() => router.push('/settings')}>
+            Settings
+          </Stack.Toolbar.MenuAction>
         </Stack.Toolbar.Menu>
-        <Stack.Toolbar.Button
-          icon="square.and.pencil"
-          accessibilityLabel="New chat"
-          disabled={!hasMessages}
-          onPress={newChat}
-        />
       </Stack.Toolbar>
     </>
+  );
+}
+
+/** The chat's name over the model's, in a glass pill in the middle of the header. */
+function TitlePill({ onPress }: { onPress?: () => void }) {
+  const t = useTheme();
+  const title = app.use((s) => (s.chat.messages.length ? s.chat.title : 'New chat'));
+  const engine = app.use((s) => s.engine);
+  const busy = app.use((s) => s.busy);
+  const model = findModel(engine.modelId);
+  const subtitle = engine.status === 'loading'
+    ? `Loading ${Math.round(engine.fraction * 100)}%`
+    : engine.status === 'ready' && model ? (busy ? `${model.name} · Writing` : model.name) : 'No model';
+  return (
+    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole="header" style={({ pressed }) => pressed && styles.dim}>
+      <Glass c={t.c} style={styles.pill}>
+        <Text numberOfLines={1} style={[styles.pillTitle, { color: t.c.text }]}>{title}</Text>
+        <Text numberOfLines={1} style={[styles.pillSub, { color: t.c.secondary }]}>{subtitle}</Text>
+      </Glass>
+    </Pressable>
   );
 }
 
@@ -298,7 +322,13 @@ const styles = StyleSheet.create({
   emptyBody: { flexGrow: 1, paddingHorizontal: 20 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0 },
   jump: { position: 'absolute', alignSelf: 'center' },
-  jumpGlass: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  jumpGlass: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  pill: {
+    height: 44, borderRadius: 22, paddingHorizontal: 20, maxWidth: 230,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  pillTitle: { fontSize: 15, fontWeight: '700' },
+  pillSub: { fontSize: 12, marginTop: -1 },
 
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 18, paddingBottom: 30 },
   h1: { fontFamily: serif, fontSize: 34, lineHeight: 40, textAlign: 'center', letterSpacing: -0.3 },

@@ -64,7 +64,7 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
 
 It uses the system's own navigation bars, sheets, menus and SF Symbols, and
 Liquid Glass for the message box on iOS 26 and later. The look is warm and
-quiet: a paper-like palette, one accent colour, and replies set in a serif.
+quiet: a paper-like palette and one accent colour.
 
 ## Being a good citizen on the phone
 

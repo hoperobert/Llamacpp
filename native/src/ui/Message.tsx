@@ -97,7 +97,7 @@ function Action({ t, icon, label, onPress }: { t: Theme; icon: IconName; label: 
       accessibilityLabel={label}
       style={({ pressed }) => [styles.action, pressed && { backgroundColor: t.c.fill }]}
     >
-      <Icon name={icon} size={17} color={t.c.secondary} />
+      <Icon name={icon} size={19} color={t.c.secondary} />
     </Pressable>
   );
 }
@@ -123,8 +123,9 @@ function Thinking({ t, message, streaming }: { t: Theme; message: Message; strea
         accessibilityRole="button"
         accessibilityLabel={`${label}. ${open ? 'Hide' : 'Show'} reasoning`}
       >
+        <Icon name="lightbulb" size={16} color={t.c.secondary} />
         <Text style={[styles.thinkingLabel, { color: t.c.secondary }]}>{label}</Text>
-        {!thinkingNow && <Icon name={open ? 'chevron.up' : 'chevron.down'} size={11} color={t.c.tertiary} weight="semibold" />}
+        {!thinkingNow && <Icon name={open ? 'chevron.down' : 'chevron.right'} size={12} color={t.c.tertiary} weight="semibold" />}
       </Pressable>
       {(open || thinkingNow) && (
         <Text
@@ -169,17 +170,17 @@ const styles = StyleSheet.create({
   divider: { textAlign: 'center', fontSize: 12, marginBottom: 16 },
   userRow: { alignItems: 'flex-end' },
   bubble: {
-    maxWidth: '84%', borderRadius: 18, borderCurve: 'continuous',
-    paddingHorizontal: 14, paddingVertical: 9,
+    maxWidth: '84%', borderRadius: 24, borderCurve: 'continuous',
+    paddingHorizontal: 17, paddingVertical: 11,
   },
   assistant: { gap: 10 },
   note: { fontSize: 13 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: -8, marginTop: -2 },
-  action: { width: 36, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  action: { width: 40, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   speed: { fontSize: 12, marginLeft: 8, fontVariant: ['tabular-nums'] },
   thinking: { gap: 8 },
-  thinkingHead: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
-  thinkingLabel: { fontSize: 14, fontWeight: '500' },
+  thinkingHead: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start' },
+  thinkingLabel: { fontSize: 16 },
   thinkingText: { borderLeftWidth: 2, paddingLeft: 12 },
   dots: { flexDirection: 'row', gap: 5, paddingVertical: 8 },
   dot: { width: 7, height: 7, borderRadius: 4 },

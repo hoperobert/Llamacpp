@@ -36,6 +36,8 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   const modelLabel = engine.status === 'loading'
     ? `Loading ${Math.round(engine.fraction * 100)}%`
     : ready && model ? model.name : 'Choose model';
+  // Buttons sit on the glass, so they are a faint tint rather than more glass.
+  const chip = t.c.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.055)';
 
   return (
     <View
@@ -57,37 +59,45 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
         <View style={styles.bar}>
           <Pressable
             onPress={() => { haptic('select'); changeSettings({ thinking: !thinking }); }}
-            hitSlop={6}
+            hitSlop={4}
             accessibilityRole="switch"
             accessibilityState={{ checked: thinking }}
             accessibilityLabel="Think before answering"
-            style={[
-              styles.round,
-              { borderColor: thinking ? t.c.accent : t.c.line, backgroundColor: thinking ? t.c.accent : 'transparent' },
-            ]}
+            style={({ pressed }) => [styles.round, { backgroundColor: chip }, pressed && styles.dim]}
           >
-            <Icon name={thinking ? 'lightbulb.fill' : 'lightbulb'} size={17} color={thinking ? t.c.onAccent : t.c.secondary} />
+            <Icon
+              name={thinking ? 'lightbulb.fill' : 'lightbulb'}
+              size={19}
+              color={thinking ? t.c.accent : t.c.text}
+            />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push('/models')}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={`${modelLabel}. Change model`}
+            style={({ pressed }) => [styles.model, { backgroundColor: chip }, pressed && styles.dim]}
+          >
+            <Text numberOfLines={1} style={[styles.modelText, { color: t.c.text }]}>
+              {modelLabel}
+              {thinking && ready && <Text style={{ color: t.c.secondary, fontWeight: '400' }}>  Think</Text>}
+            </Text>
           </Pressable>
           <View style={styles.flex} />
           <Pressable
-            onPress={() => router.push('/models')}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`${modelLabel}. Change model`}
-            style={({ pressed }) => [styles.model, pressed && styles.dim]}
-          >
-            <Text numberOfLines={1} style={[styles.modelText, { color: t.c.secondary }]}>{modelLabel}</Text>
-            <Icon name="chevron.down" size={10} color={t.c.tertiary} weight="bold" />
-          </Pressable>
-          <Pressable
             onPress={submit}
             disabled={!canSend}
-            hitSlop={6}
+            hitSlop={4}
             accessibilityRole="button"
             accessibilityLabel={busy ? 'Stop' : 'Send'}
-            style={[styles.round, styles.send, { backgroundColor: t.c.accent }, !canSend && styles.off]}
+            style={[styles.round, { backgroundColor: canSend ? t.c.accent : chip }]}
           >
-            <Icon name={busy ? 'stop.fill' : 'arrow.up'} size={busy ? 13 : 16} color={t.c.onAccent} weight="bold" />
+            <Icon
+              name={busy ? 'stop.fill' : 'arrow.up'}
+              size={busy ? 14 : 19}
+              color={canSend ? t.c.onAccent : t.c.tertiary}
+              weight="semibold"
+            />
           </Pressable>
         </View>
       </Glass>
@@ -97,18 +107,13 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  wrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 12, paddingTop: 6 },
-  status: { fontSize: 13, marginBottom: 8, marginLeft: 14 },
-  box: { borderRadius: 26, borderCurve: 'continuous', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 8 },
-  input: { maxHeight: 140, minHeight: 36, paddingTop: 6, paddingBottom: 6, paddingHorizontal: 6 },
-  bar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  round: {
-    width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  send: { borderWidth: 0 },
-  off: { opacity: 0.35 },
+  wrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: 10, paddingTop: 6 },
+  status: { fontSize: 13, marginBottom: 8, marginLeft: 16 },
+  box: { borderRadius: 30, borderCurve: 'continuous', padding: 10 },
+  input: { maxHeight: 150, minHeight: 40, paddingTop: 8, paddingBottom: 8, paddingHorizontal: 8 },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  round: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
   dim: { opacity: 0.5 },
-  model: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 190, paddingVertical: 6 },
-  modelText: { fontSize: 14, fontWeight: '500', flexShrink: 1 },
+  model: { height: 42, borderRadius: 21, paddingHorizontal: 16, justifyContent: 'center', flexShrink: 1 },
+  modelText: { fontSize: 16, fontWeight: '600' },
 });

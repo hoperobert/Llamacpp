@@ -6,7 +6,7 @@ import React from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { copyText } from '../lib/app';
 import { Icon } from './Icon';
-import { serif, type Theme } from './theme';
+import type { Theme } from './theme';
 
 type Block =
   | { type: 'p' | 'quote'; text: string }
@@ -151,7 +151,7 @@ function CodeBlock({ block, t }: { block: Extract<Block, { type: 'code' }>; t: T
 }
 
 function Table({ block, t }: { block: Extract<Block, { type: 'table' }>; t: Theme }) {
-  const body = { color: t.c.text, fontSize: t.size - 2, lineHeight: (t.size - 2) * 1.4, fontFamily: serif };
+  const body = { color: t.c.text, fontSize: t.size - 2, lineHeight: (t.size - 2) * 1.4 };
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
       <View style={[styles.table, { borderColor: t.c.line }]}>
@@ -178,7 +178,7 @@ function Table({ block, t }: { block: Extract<Block, { type: 'table' }>; t: Them
 
 export const Markdown = React.memo(function Markdown({ source, t }: { source: string; t: Theme }) {
   const blocks = React.useMemo(() => parse(source), [source]);
-  const body = { color: t.c.text, fontSize: t.size, lineHeight: t.size * 1.5, fontFamily: serif };
+  const body = { color: t.c.text, fontSize: t.size, lineHeight: t.size * 1.45 };
   return (
     <View style={styles.gap}>
       {blocks.map((block, i) => {
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row' },
   flex: { flex: 1 },
   marker: { width: 24 },
-  bold: { fontWeight: '700' },
+  bold: { fontWeight: '600' },
   heading: { fontWeight: '700', marginTop: 4 },
   italic: { fontStyle: 'italic' },
   strike: { textDecorationLine: 'line-through' },

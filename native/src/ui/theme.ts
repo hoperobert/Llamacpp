@@ -1,5 +1,5 @@
-// Colours and type. A warm, paper-like palette with one clay accent, and a
-// serif face for headings and replies.
+// Colours and type. A warm, quiet palette with one clay accent. Text is the
+// system face; the serif is kept for the greeting.
 
 import { useMemo } from 'react';
 import { Platform, useColorScheme } from 'react-native';
@@ -27,15 +27,15 @@ const light = {
 
 const dark: Palette = {
   dark: true,
-  bg: '#262624',
-  grouped: '#1f1e1d',
-  card: '#30302e',
-  fill: '#3a3a37',
+  bg: '#1c1c1a',
+  grouped: '#161615',
+  card: '#272725',
+  fill: '#2f2f2d',
   text: '#f5f4ee',
-  secondary: '#a8a59c',
-  tertiary: '#76746d',
-  line: '#43423f',
-  accent: '#d97757',
+  secondary: '#a3a199',
+  tertiary: '#6f6d67',
+  line: '#3a3a37',
+  accent: '#d4633f',
   onAccent: '#ffffff',
   danger: '#f2776b',
   good: '#7fbf8e',
