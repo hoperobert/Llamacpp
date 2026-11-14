@@ -25,7 +25,7 @@ It runs llama.cpp natively on the GPU (Metal) through
 
 No computer or terminal is needed. Everything happens in Safari on the iPhone.
 
-1. Open [Expo Launch for this app](https://launch.dev/?github=https://github.com/hoperobert/Llamacpp/tree/claude/magical-darwin-7ddbmk/native&appBundleId=com.hoperobert.pocketllm&appName=Pocket+LLM&projectName=Pocket+LLM).
+1. Open [Expo Launch for this app](https://launch.dev/?github=https://github.com/hoperobert/Llamacpp/tree/main/native&appBundleId=com.hoperobert.pocketllm&appName=Pocket+LLM&projectName=Pocket+LLM).
 2. Sign in with Expo, choose **Launch to App Store**, and sign in to your
    Apple account when asked. Launch creates the signing certificates.
 3. When the build finishes, Apple emails a TestFlight invite. Install the
