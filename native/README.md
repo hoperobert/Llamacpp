@@ -61,6 +61,23 @@ version raised first, so the update that follows cannot reach an older build.
 without that; after raising it, run `npm run runtime:lock`. The bottom of Settings
 shows the build number and, when one is in use, the update.
 
+### Updating a build that lacks newer native parts
+
+Code that calls on a native part the installed build does not have closes the
+app. When a build with new native parts cannot be made yet, the rest can still
+be sent to the build people have:
+
+```sh
+# with "runtimeVersion" in app.json set to that build's, for this command only
+POCKET_LITE=1 npx eas-cli@latest update --channel production --environment production --platform ios --message "What changed"
+```
+
+`POCKET_LITE=1` swaps each file that uses a newer native part for a stand-in
+(`*.lite.ts`, listed in `metro.config.js`), and the app hides what cannot work
+there. Before sending, check that none of the newer packages are in the bundle
+(`npx expo export --platform ios --source-maps` and look through the map's
+`sources`), and run it in the simulator (`real-lite` in `sim/run`).
+
 ### Setting it up from scratch
 
 For a different Expo or Apple account, remove `owner` and `extra.eas` from
