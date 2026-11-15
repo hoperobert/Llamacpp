@@ -25,6 +25,7 @@ import {
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
 import { createStore } from './store';
+import { cleanTitle, isBrokenTitle } from './text';
 
 export type EngineState = {
   status: 'none' | 'loading' | 'ready';
@@ -180,6 +181,7 @@ export async function start() {
     store.saveSettings(settings);
   }
   app.set({ settings, memories, chatList, customModels, projects, crashed: !!marker });
+  repairTitles(chatList);
 
   const models = allFiles();
   const flags = await Promise.all(models.map((m) => isDownloaded(m)));
@@ -222,6 +224,21 @@ export async function start() {
   Network.addNetworkStateListener((state) => {
     if (state.isConnected && state.isInternetReachable !== false) resumeFailedDownloads();
   });
+}
+
+/**
+ * An earlier version saved some titles with the model's tags or a "Title:"
+ * label still in them. Tidy those, or mark them to be named again.
+ */
+async function repairTitles(chatList: ChatMeta[]) {
+  for (const meta of chatList.filter((c) => isBrokenTitle(c.title))) {
+    const title = cleanTitle(meta.title);
+    const next = await store.updateChat(meta.id, title ? { title } : { title: 'New chat', titled: false });
+    app.set((s) => ({
+      chatList: next,
+      ...(s.chat.id === meta.id ? { chat: { ...s.chat, title: title || 'New chat', titled: !!title } } : {}),
+    }));
+  }
 }
 
 // ---------- staying well-behaved in the background ----------

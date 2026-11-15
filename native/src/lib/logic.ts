@@ -2,6 +2,7 @@
 
 import * as engine from './engine';
 import { newId, STYLES, type Chat, type Memory, type Project, type Settings } from './storage';
+import { cleanTitle, withoutThinking } from './text';
 
 export const KEEP_RECENT = 4;        // messages left untouched when a chat is compacted
 const MAX_MEMORIES = 40;
@@ -90,7 +91,8 @@ export async function compact(chat: Chat, settings: Settings, keep = KEEP_RECENT
           content: (summary ? `Summary so far:\n${summary}\n\n` : '') + `New messages:\n${transcript}`,
         },
       ], { maxTokens: 220 });
-      if (text) summary = text;
+      const clean = withoutThinking(text);
+      if (clean) summary = clean;
     } catch {
       // Fall back to dropping the old messages.
     }
@@ -129,8 +131,7 @@ export async function suggestTitle(chat: Chat): Promise<string> {
       },
       { role: 'user', content: `User: ${user.slice(0, 400)}\n\nAssistant: ${reply.slice(0, 400)}\n\nTitle:` },
     ], { maxTokens: 16 });
-    const title = raw.split('\n')[0].replace(/^title:\s*/i, '').replace(/^["'“‘*#\s]+|["'”’*.\s]+$/g, '').trim();
-    return title.length >= 3 && title.length <= 60 ? title : '';
+    return cleanTitle(raw);
   } catch {
     return '';
   }

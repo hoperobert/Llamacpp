@@ -46,7 +46,7 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "patch-package",
     "lint": "expo lint",
-    "test": "node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/db.test.mjs && node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/downloads.test.mjs"
+    "test": "node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/text.test.mjs && node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/db.test.mjs && node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/downloads.test.mjs"
   },
   "private": true
 }
