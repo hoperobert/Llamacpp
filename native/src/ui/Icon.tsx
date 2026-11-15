@@ -57,6 +57,8 @@ const SYMBOLS = {
   'line.3.horizontal': 'menu',
   'folder': 'folder',
   'folder.badge.plus': 'create_new_folder',
+  'mic': 'mic',
+  'waveform': 'graphic_eq',
   'bell': 'notifications',
   'timer': 'timer',
   'calendar': 'calendar_today',

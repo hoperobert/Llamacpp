@@ -47,6 +47,7 @@ import {
 import { describeClose, type Session } from './session';
 import { createStore } from './store';
 import { cleanTitle, isBrokenTitle } from './text';
+import { listen, stopListening } from './voice';
 
 export type EngineState = {
   status: 'none' | 'loading' | 'ready';
@@ -83,6 +84,8 @@ type State = {
   queued: string;
   /** A photo waiting to be sent with the next message. */
   attachment: string | null;
+  /** True while the app is listening to the user speak. */
+  listening: boolean;
   /** A file waiting to be sent with the next message: its name and the text in it. */
   attachedFile: { name: string; text: string } | null;
   crashed: boolean;
@@ -118,6 +121,7 @@ export const app = createStore<State>({
   queued: '',
   attachment: null,
   attachedFile: null,
+  listening: false,
   crashed: false,
   lastClose: '',
   lastError: '',
@@ -941,6 +945,12 @@ async function runTurn(userText: string | null, carryOn?: Message) {
     return;
   }
   if (!stoppedByUser && !interrupted) haptic('success');
+  if (spoken) {
+    // The message was spoken, so the reply is too.
+    spoken = false;
+    const reply = app.get().chat.messages.at(-1);
+    if (AppState.currentState === 'active' && !stoppedByUser && !interrupted && reply?.role === 'assistant' && app.get().chat.id === chatId) speak(reply);
+  }
   // Once a first reply is done is the moment to ask about notifications: asking
   // while it is written would cover the app, which pauses a reply.
   if (AppState.currentState === 'active' && app.get().settings.background && hasNative) askToNotify();
@@ -993,8 +1003,14 @@ export async function send(text: string, photo: string | null = null, file: Stat
   const plain = !photo && !file && !typed && app.get().settings.assistant;
   const action = plain ? findAction(text, Date.now()) : null;
   if (action) {
-    await saveChat({ ...chat, title, messages: [...chat.messages, asked, offer(action)] });
+    const card = offer(action);
+    await saveChat({ ...chat, title, messages: [...chat.messages, asked, card] });
     haptic();
+    if (spoken) {
+      // Asked for out loud: say what is on offer. Approving is still a tap.
+      spoken = false;
+      Speech.speak(`${card.content.replace(/\n/g, '. ')}. Tap to approve.`);
+    }
     return;
   }
   // A question about the phone ("what's on my calendar?") is answered from the phone.
@@ -1154,6 +1170,35 @@ export async function attachPhoto(from: 'library' | 'camera' = 'library') {
   const uri = await (from === 'camera' ? takePhoto() : pickImage()).catch(() => null);
   if (uri === 'denied') toast('Allow the camera in Settings');
   else if (uri) app.set({ attachment: uri });
+}
+
+/** Set when a message was spoken, so that its reply is read aloud. */
+let spoken = false;
+
+/**
+ * The microphone button. Listens until the speaker pauses, sends what was
+ * said, and reads the reply aloud. Pressed while listening, it stops and sends.
+ */
+export function talk() {
+  if (app.get().listening) {
+    stopListening();
+    return;
+  }
+  haptic();
+  Speech.stop().catch(() => {});
+  app.set({ listening: true, speakingId: null });
+  listen(
+    (text) => app.set({ draft: text }),
+    (problem) => {
+      app.set({ listening: false });
+      if (problem === 'denied') toast('Allow the microphone and speech recognition in Settings');
+      else if (problem) toast(`Could not listen. ${problem}`);
+      else if (app.get().draft.trim()) {
+        spoken = true;
+        submit();
+      }
+    },
+  );
 }
 
 /** Reads a file (a PDF, or anything that is text) and holds it to go with the next message. */

@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { app, findModel, haptic, runCommand, submit } from '../lib/app';
+import { app, findModel, haptic, runCommand, submit, talk } from '../lib/app';
 import { parseCommand, suggest, type Command } from '../lib/commands';
 import { imageUri } from '../lib/images';
 import { STYLES } from '../lib/storage';
@@ -36,6 +36,7 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   const queued = app.use((s) => s.queued);
   const attachment = app.use((s) => s.attachment);
   const attachedFile = app.use((s) => s.attachedFile);
+  const listening = app.use((s) => s.listening);
   const engine = app.use((s) => s.engine);
   const thinking = app.use((s) => s.settings.thinking);
   const styleId = app.use((s) => s.settings.style);
@@ -172,22 +173,35 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
             </Text>
           </Pressable>
           <View style={styles.flex} />
-          <Pressable
-            onPress={submit}
-            disabled={!canSend}
-            hitSlop={4}
-            accessibilityRole="button"
-            accessibilityLabel={stops ? 'Stop' : busy ? 'Queue' : 'Send'}
-            // Sending is the one filled button. Stopping is quiet, like the other controls.
-            style={[styles.round, { backgroundColor: canSend && !stops ? t.c.accent : chip }]}
-          >
-            <Icon
-              name={stops ? 'stop.fill' : 'arrow.up'}
-              size={stops ? 15 : 19}
-              color={stops ? t.c.text : canSend ? t.c.onAccent : t.c.tertiary}
-              weight="semibold"
-            />
-          </Pressable>
+          {(listening || (!typed && !busy && !acts && ready)) ? (
+            // With nothing typed, the button is for speaking: it listens, sends, and the reply is read aloud.
+            <Pressable
+              onPress={talk}
+              hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel={listening ? 'Stop listening and send' : 'Speak'}
+              style={({ pressed }) => [styles.round, { backgroundColor: listening ? t.c.accent : chip }, pressed && styles.dim]}
+            >
+              <Icon name={listening ? 'waveform' : 'mic'} size={19} color={listening ? t.c.onAccent : t.c.text} weight="semibold" />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={submit}
+              disabled={!canSend}
+              hitSlop={4}
+              accessibilityRole="button"
+              accessibilityLabel={stops ? 'Stop' : busy ? 'Queue' : 'Send'}
+              // Sending is the one filled button. Stopping is quiet, like the other controls.
+              style={[styles.round, { backgroundColor: canSend && !stops ? t.c.accent : chip }]}
+            >
+              <Icon
+                name={stops ? 'stop.fill' : 'arrow.up'}
+                size={stops ? 15 : 19}
+                color={stops ? t.c.text : canSend ? t.c.onAccent : t.c.tertiary}
+                weight="semibold"
+              />
+            </Pressable>
+          )}
         </View>
       </Glass>
     </View>

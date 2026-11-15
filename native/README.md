@@ -117,6 +117,9 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   "what are my reminders?", "where am I?") are answered from the phone. What
   was asked for, and when, is worked out by rule (`src/lib/assistant.ts`), not
   by the model: a small model gets dates wrong, and rules cost no time.
+- **Voice.** With nothing typed, the send button is a microphone: it listens
+  until you pause, sends what you said, and reads the reply aloud. The words
+  are worked out on the iPhone where it can do that.
 - **Files and photos of text.** A PDF or a text file can be attached to a
   message, or opened in Pocket LLM from Files, Mail or the share sheet; as
   much of it as fits goes to the model with the question. A model that cannot
