@@ -122,10 +122,12 @@ quiet: a paper-like palette with a blue accent.
 
 ## Being a good citizen on the phone
 
-- iOS closes an app that uses the GPU in the background. A reply is stopped
-  cleanly as the app leaves the screen and what was written is kept; nothing
-  is asked of the model until the app is back. A message sent just as the app
-  was left gets its reply on return.
+- iOS does not let an iPhone app use the GPU in the background (the
+  allowance for it in iOS 26 covers only iPads with an M3 or newer), and closes
+  one that tries. So a reply stops as the app leaves the screen, and carries on
+  from its last word when the app is back, without anything to tap. One that
+  was still thinking is asked again, as is a message sent just as the app was
+  left.
 - The bottom of Settings says how the app last closed (on screen or in the
   background, and what it was doing), which tells a crash from iOS making room.
 - The model stays loaded while the app is in the background, so coming back

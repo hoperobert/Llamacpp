@@ -379,8 +379,13 @@ async function repairTitles(chatList: ChatMeta[]) {
 /** A model waiting to be loaded once the app is on screen. */
 let loadWhenActive: Model | null = null;
 
-/** A reply that could not be started because the app had left the screen. It is written on return. */
-let resumeTurn: { chatId: string; userText: string | null } | null = null;
+/**
+ * A reply that could not be written, or could not be finished, because the app
+ * had left the screen. It is written, or carried on from where it stopped, on return.
+ */
+let resumeTurn: { chatId: string; userText: string | null; carryOn?: boolean } | null = null;
+
+const PAUSED = 'Paused when you left the app.';
 
 /** What the app is doing right now, saved as it changes. See session.ts. */
 let session: Session = { phase: 'active', since: Date.now(), doing: [], model: null, warnings: 0 };
@@ -420,7 +425,7 @@ function appStateChanged(next: string) {
     // iOS closes an app that is still using the GPU when it reaches the
     // background, and the warning for that can arrive too late. So stop as
     // soon as the app starts to leave the screen, and keep what was written.
-    if (app.get().busy) interrupted = 'Paused when you left the app.';
+    if (app.get().busy) interrupted = PAUSED;
     engine.stop();
     Speech.stop().catch(() => {});
     if (session.phase === 'active') note({ phase: next, since: Date.now(), warnings: 0 });
@@ -450,7 +455,14 @@ function resumeIfWaiting() {
   const { chat, busy } = app.get();
   if (!turn || busy || AppState.currentState !== 'active') return;
   resumeTurn = null;
-  if (chat.id === turn.chatId && chat.messages.at(-1)?.role === 'user') runTurn(turn.userText);
+  if (chat.id !== turn.chatId) return;
+  const last = chat.messages.at(-1);
+  if (turn.carryOn) {
+    // Half a reply was written. Carry on from its last word.
+    if (last?.role === 'assistant' && last.stopped === PAUSED) runTurn(null, last);
+  } else if (last?.role === 'user') {
+    runTurn(turn.userText);
+  }
 }
 
 /** How long after leaving the app a relaunch still returns to the chat that was open. */
@@ -687,16 +699,25 @@ function flushSideJobs() {
   }
 }
 
-async function runTurn(userText: string | null) {
+/**
+ * Writes the reply to the chat on screen. Given a reply that was cut off by
+ * leaving the app (`carryOn`), it carries that one on instead of starting another.
+ */
+async function runTurn(userText: string | null, carryOn?: Message) {
   stoppedByUser = false;
   interrupted = '';
   const chatId = app.get().chat.id;
   if (AppState.currentState !== 'active') {
     // Sent just as the app was left. The reply is written on return.
-    resumeTurn = { chatId, userText };
+    resumeTurn = { chatId, userText, carryOn: !!carryOn };
     return;
   }
-  const message: Message = { id: newId(), role: 'assistant', content: '' };
+  const message: Message = carryOn ? { ...carryOn, stopped: undefined } : { id: newId(), role: 'assistant', content: '' };
+  if (carryOn) {
+    // The half-written reply leaves the list and is shown as the one being written.
+    // What is saved keeps it as it was until there is more to save.
+    app.set((s) => ({ chat: { ...s.chat, messages: s.chat.messages.slice(0, -1) } }));
+  }
   app.set({ busy: true, live: message });
   doing('writing a reply', true);
   await activateKeepAwakeAsync('chat').catch(() => {});
@@ -715,28 +736,38 @@ async function runTurn(userText: string | null) {
         app.set({ status: '' });
       }
       let lastPaint = 0;
-      const result = await engine.chat(
-        promptMessages(current(), settings, memories, project),
-        { temperature: settings.temperature, maxTokens: replyBudget(settings), thinking: settings.thinking },
-        (content, reasoning) => {
+      const paint = () => {
+        // Repainting on every token is wasteful; a few times a second reads the same.
+        const now = Date.now();
+        if (now - lastPaint > 70 && onScreen()) {
+          lastPaint = now;
+          app.set({ live: { ...message } });
+        }
+      };
+      const budget = { temperature: settings.temperature, maxTokens: replyBudget(settings) };
+      const prompt = promptMessages(current(), settings, memories, project);
+      let result: { content: string; reasoning?: string; timings: engine.Timings };
+      if (carryOn) {
+        result = await engine.continueChat(prompt, carryOn.content, budget, (content) => {
+          message.content = content;
+          paint();
+        });
+      } else {
+        result = await engine.chat(prompt, { ...budget, thinking: settings.thinking }, (content, reasoning) => {
           message.content = content;
           message.reasoning = reasoning;
-          // Repainting on every token is wasteful; a few times a second reads the same.
-          const now = Date.now();
-          if (now - lastPaint > 70 && onScreen()) {
-            lastPaint = now;
-            app.set({ live: { ...message } });
-          }
-        },
-      );
+          paint();
+        });
+        message.reasoning = result.reasoning || undefined;
+        message.thought = result.timings.thought || undefined;
+      }
       message.content = result.content;
-      message.reasoning = result.reasoning || undefined;
       message.speed = result.timings.speed;
-      message.thought = result.timings.thought || undefined;
       if (interrupted) message.stopped = interrupted;
-      // Cut off by leaving the app before a word of the answer was written (it may
-      // still have been thinking). There is nothing to keep, so it is asked again on return.
-      if (interrupted && !stoppedByUser && !message.content) resumeTurn = { chatId, userText };
+      // Cut off by leaving the app. With nothing of the answer written yet (it may still
+      // have been thinking) it is asked again on return; otherwise it is carried on from
+      // where it stopped.
+      if (interrupted && !stoppedByUser) resumeTurn = { chatId, userText, carryOn: !!message.content };
       if (message.content && onScreen()) {
         const chat = current();
         const messages = [...chat.messages, message];
@@ -748,18 +779,16 @@ async function runTurn(userText: string | null) {
       }
     } catch (e) {
       const partial = message.content.trim();
-      if (engine.isInterrupted(e) && !stoppedByUser && !partial) {
-        // The app left the screen before the reply could begin. Begin it on return.
-        interrupted = interrupted || 'Paused when you left the app.';
-        resumeTurn = { chatId, userText };
+      if (engine.isInterrupted(e) && !stoppedByUser) {
+        // The app left the screen before the reply could begin, or be carried on. Do it on return.
+        interrupted = interrupted || PAUSED;
+        resumeTurn = { chatId, userText, carryOn: !!partial };
       }
       if (partial && onScreen()) {
         const chat = current();
-        await saveChat({
-          ...chat,
-          messages: [...chat.messages, { ...message, content: partial, stopped: interrupted || undefined }],
-          ctx: null,
-        });
+        // A reply that could not be carried on stays as it was, with the button to continue by hand.
+        const stopped = interrupted || (carryOn ? PAUSED : undefined);
+        await saveChat({ ...chat, messages: [...chat.messages, { ...message, content: partial, stopped }], ctx: null });
       } else if (!stoppedByUser && !interrupted) {
         toast(`Something went wrong. ${String((e as Error)?.message ?? e)}`);
         haptic('warning');

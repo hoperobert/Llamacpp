@@ -160,6 +160,57 @@ export async function chat(
   };
 }
 
+// A mark that will not be found in anything a person or a model writes.
+const CONTINUE_HERE = '\u2063pocket\u2063continue\u2063here\u2063';
+
+/**
+ * Carries on a reply that was cut off, from the exact word where it stopped.
+ * iOS does not let an iPhone app use the GPU in the background, so a reply
+ * has to stop when the app is left; this is what makes that invisible on
+ * return.
+ *
+ * The conversation is written out the way the model reads it, with the reply
+ * so far as its last turn, and everything the model's format puts after that
+ * turn is cut away. The model then simply keeps writing.
+ */
+export async function continueChat(
+  messages: ChatMessage[],
+  written: string,
+  options: { temperature: number; maxTokens: number },
+  onUpdate: (content: string) => void,
+): Promise<{ content: string; timings: Timings }> {
+  if (!context) throw new Error('No model is loaded');
+  if (!onScreen()) throw new Interrupted();
+  // A photo takes its own place in what the model reads, which this way of writing it out does not keep.
+  if (messages.some((m) => m.image)) throw new Error('A reply about a photo cannot be carried on');
+  const formatted = await context.getFormattedChat(
+    [...messages.map(({ role, content }) => ({ role, content })), { role: 'assistant', content: CONTINUE_HERE }],
+    null,
+    { jinja: true, enable_thinking: false, add_generation_prompt: false },
+  );
+  const whole = (formatted as { prompt?: string }).prompt ?? '';
+  const at = whole.lastIndexOf(CONTINUE_HERE);
+  if (at < 0) throw new Error('This model cannot carry on a reply');
+  if (!onScreen()) throw new Interrupted();
+  let more = '';
+  const result = await context.completion(
+    { prompt: whole.slice(0, at) + written, n_predict: options.maxTokens, temperature: options.temperature },
+    (data) => {
+      more += data.token;
+      onUpdate(splitThinking(written + more).content);
+    },
+  );
+  const t = result.timings;
+  return {
+    content: splitThinking(written + (result.text ?? more)).content,
+    timings: {
+      used: (t?.cache_n ?? 0) + (t?.prompt_n ?? 0) + (t?.predicted_n ?? 0),
+      speed: t?.predicted_per_second ?? 0,
+      thought: 0,
+    },
+  };
+}
+
 /** One-shot completion for background jobs (summaries, titles, memory extraction). */
 export async function complete(
   messages: ChatMessage[],

@@ -93,6 +93,25 @@ export async function chat(
   };
 }
 
+/** Carries on a reply that was cut off: here, with the rest of the canned one. */
+export async function continueChat(
+  _messages: ChatMessage[],
+  written: string,
+  _options: { temperature: number; maxTokens: number },
+  onUpdate: (content: string) => void,
+): Promise<{ content: string; timings: Timings }> {
+  stopping = false;
+  let content = written;
+  const rest = SAMPLE.startsWith(written) ? SAMPLE.slice(written.length) : ' …and so on to the end.';
+  for (const piece of rest.match(/\s*\S+/g) ?? []) {
+    if (stopping) break;
+    content += piece;
+    onUpdate(content);
+    await wait(25);
+  }
+  return { content: content.trim(), timings: { used: 420, speed: 38.4, thought: 0 } };
+}
+
 export async function complete(messages: ChatMessage[], options: { maxTokens?: number; schema?: object } = {}) {
   await wait(300);
   if (options.schema) return JSON.stringify({ facts: [] });

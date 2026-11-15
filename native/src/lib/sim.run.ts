@@ -224,14 +224,30 @@ async function scenario() {
 
   // ---------- leaving the app and coming back ----------
   await leave('idle');
+  // Leaving with half an answer written: on return it should carry on from its last word.
+  changeSettings({ thinking: false });
   send('Write a long poem about the sea, at least 300 words.');
-  await until(() => app.get().busy, 15000);
-  await wait(8000);
-  await leave('in the middle of a reply');
-  await until(() => !app.get().busy, 30000);
-  step(`after leaving mid-reply ${state()}`);
-  await ask('Continue');
-  step(`continued ${state()}`);
+  await until(() => (app.get().live?.content.length ?? 0) > 120, 60000);
+  const before = app.get().live?.content ?? '';
+  await leave('with half a reply written');
+  await until(() => app.get().busy, 8000);
+  step(`carrying on? ${state()}`);
+  await until(() => !app.get().busy, 120000);
+  const after = app.get().chat.messages.at(-1);
+  step(`carried on: ${after?.role === 'assistant' && !after.stopped && after.content.length > before.length + 40 && after.content.startsWith(before.slice(0, 80)) ? 'YES' : 'NO'} ` +
+    `(${before.length} -> ${after?.content.length}). Join: ${JSON.stringify((after?.content ?? '').slice(Math.max(0, before.length - 60), before.length + 100))} ${state()}`);
+  await wait(1500);
+
+  // Leaving while it is still thinking: nothing to keep, so it should be asked again.
+  changeSettings({ thinking: true });
+  send('Explain in detail how tides work.');
+  await until(() => !!app.get().live?.reasoning, 60000);
+  await wait(1500);
+  await leave('while it was thinking');
+  await until(() => app.get().busy, 8000);
+  await until(() => !app.get().busy, 120000);
+  const asked = app.get().chat.messages.at(-1);
+  step(`asked again: ${asked?.role === 'assistant' && !asked.stopped && asked.content.length > 40 ? 'YES' : 'NO'} ${state()}`);
   await wait(1500);
 
   // ---------- chats, commands ----------
