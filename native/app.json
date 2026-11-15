@@ -58,6 +58,12 @@
     "web": {
       "bundler": "metro",
       "output": "single"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/78e63a85-401c-41e2-9642-8edcc22ddc79"
     }
   }
 }

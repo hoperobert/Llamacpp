@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import { Stack, useRouter } from 'expo-router';
 import {
   app, changeSettings, deleteAllChats, deleteAllMemories, exportEverything, findModel,
@@ -97,6 +98,9 @@ export default function SettingsScreen() {
             // The number in brackets is the build, as TestFlight shows it.
             `Version ${Constants.expoConfig?.version ?? ''}${Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ''}`,
             `llama.cpp ${engineVersion}`,
+            // Code delivered over the air since the build, by when it was made (UTC).
+            Updates.isEmbeddedLaunch === false && Updates.createdAt
+              ? `update ${Updates.createdAt.toISOString().slice(5, 16).replace('T', ' ')}` : '',
             ramMB ? `${Math.round(ramMB / 1024)} GB` : '',
             engine.status === 'ready' ? (engine.gpu ? 'GPU' : 'CPU') : '',
             engine.status === 'ready' ? `${(settings.nCtx / 1024).toFixed(settings.nCtx % 1024 ? 1 : 0)}K context` : '',

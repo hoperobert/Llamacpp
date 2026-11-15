@@ -8,6 +8,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Network from 'expo-network';
 import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
+import * as Updates from 'expo-updates';
 
 import { onOrOff, parseCommand, subjectOf, type Command } from './commands';
 import { bestContext, DEFAULT_KV_KB, kvKBPerToken, trainedContext } from './context';
@@ -182,11 +183,34 @@ async function saveChat(next: Chat): Promise<Chat> {
 
 // ---------- launch ----------
 
+/**
+ * Fixes that are only code arrive over the air, without a new build. One that
+ * is waiting is fetched and switched to here, at launch and before any model
+ * is loaded: switching restarts the app's code, and a model loaded by the old
+ * code would be left behind in memory.
+ *
+ * Returns quickly when there is nothing new or no connection.
+ */
+async function takeUpdate() {
+  if (!Updates.isEnabled) return;
+  const within = <T>(ms: number, job: Promise<T>) =>
+    Promise.race([job, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
+  try {
+    const check = await within(3000, Updates.checkForUpdateAsync());
+    if (!check?.isAvailable) return;
+    const fetched = await within(20000, Updates.fetchUpdateAsync());
+    if (fetched?.isNew && app.get().engine.status === 'none') await Updates.reloadAsync();
+  } catch {
+    // No connection, or nothing to fetch. The app runs as it is.
+  }
+}
+
 let started = false;
 
 export async function start() {
   if (started) return;
   started = true;
+  const updated = takeUpdate();
 
   const [savedSettings, memories, chatList, marker, customModels, projects, previous] = await Promise.all([
     store.settings(), memoryStore.all(), store.chatList(), store.loadMarker(), store.customModels(),
@@ -267,6 +291,8 @@ export async function start() {
   );
   app.set({ libraryFiles: await libraryFiles() });
 
+  // The model waits for a moment in case newer code is about to take over.
+  await updated;
   const preferred = findModel(settings.modelId);
   if (preferred && downloaded[preferred.id] && settings.loadedOnce && !marker) loadWhenOnScreen(preferred);
 

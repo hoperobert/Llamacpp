@@ -37,6 +37,19 @@ few minutes to process it, then it appears in the TestFlight app.
 Signing in is either `npx eas-cli@latest login`, or an Expo access token in
 the `EXPO_TOKEN` environment variable.
 
+### Fixes without a build
+
+A change that is only code does not need a new build. Publishing it makes it
+arrive the next time the app is opened:
+
+```sh
+npx eas-cli@latest update --channel production --message "What changed"
+```
+
+A build only takes updates made for the same native code, so anything that
+adds or changes a native package still needs a build. The bottom of Settings
+shows the build number and, when one is in use, the update.
+
 ### Setting it up from scratch
 
 For a different Expo or Apple account, remove `owner` and `extra.eas` from
@@ -199,6 +212,12 @@ patch does.
 | `src/lib/images.ts` | Photos attached to messages. |
 | `src/lib/storage.ts` | Settings and other small preferences. |
 | `src/ui/` | Shared pieces: messages, the message box, lists, Markdown, icons. |
+
+## Testing on iOS without an iPhone
+
+The keyboard, the system's bars and Liquid Glass only exist on iOS. A GitHub
+Actions workflow builds a test version, runs it in an iOS simulator and keeps
+screenshots. See `sim/README.md`.
 
 ## Checks
 
