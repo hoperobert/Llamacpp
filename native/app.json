@@ -99,7 +99,8 @@
         {
           "locationWhenInUsePermission": "Pocket LLM uses your location only when you ask about where you are or for directions."
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "owner": "sunleaf",
     "extra": {

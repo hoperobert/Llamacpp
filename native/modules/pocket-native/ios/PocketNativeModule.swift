@@ -6,11 +6,14 @@
 //    and lets it run. Before iOS 26, or if that is refused, there is the older
 //    allowance of about half a minute.
 // 2. Reading the text out of a PDF.
+// 3. Reading the text in a photo (a page, a sign, a screenshot), so that a
+//    model that cannot look at pictures can still be asked about one.
 
 import BackgroundTasks
 import ExpoModulesCore
 import PDFKit
 import UIKit
+import Vision
 
 public class PocketNativeModule: Module {
   /// The iOS 26 task, held as AnyObject because the type does not exist before iOS 26.
@@ -78,6 +81,34 @@ public class PocketNativeModule: Module {
         }
       }
       return pages.joined(separator: "\n\n")
+    }
+
+    /// The text found in a picture, line by line. Empty if there is none.
+    AsyncFunction("imageText") { (uri: String, promise: Promise) in
+      guard let url = URL(string: uri) else {
+        promise.resolve("")
+        return
+      }
+      var answered = false
+      let answer = { (text: String) in
+        if !answered {
+          answered = true
+          promise.resolve(text)
+        }
+      }
+      let request = VNRecognizeTextRequest { request, _ in
+        let found = request.results as? [VNRecognizedTextObservation] ?? []
+        answer(found.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n"))
+      }
+      request.recognitionLevel = .accurate
+      request.usesLanguageCorrection = true
+      DispatchQueue.global(qos: .userInitiated).async {
+        do {
+          try VNImageRequestHandler(url: url, options: [:]).perform([request])
+        } catch {
+          answer("")
+        }
+      }
     }
   }
 

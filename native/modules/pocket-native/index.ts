@@ -11,6 +11,7 @@ type Native = {
   progress(fraction: number): Promise<void>;
   end(success: boolean): Promise<void>;
   pdfText(uri: string): Promise<string>;
+  imageText(uri: string): Promise<string>;
   addListener(event: 'onExpire', listener: () => void): { remove(): void };
 };
 
@@ -33,3 +34,6 @@ export const onBackgroundExpire = (listener: () => void) => native?.addListener(
 
 /** The text of a PDF. Empty if there is none to read, or no way to read it here. */
 export const pdfText = (uri: string) => (native ? native.pdfText(uri).catch(() => '') : Promise.resolve(''));
+
+/** The text found in a picture: a page, a sign, a screenshot. Empty if there is none. */
+export const imageText = (uri: string) => (native ? native.imageText(uri).catch(() => '') : Promise.resolve(''));
