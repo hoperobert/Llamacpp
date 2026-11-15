@@ -10,7 +10,31 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.hoperobert.pocketllm",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.hoperobert.pocketllm.reply.*"
+        ],
+        "UIBackgroundModes": [
+          "processing"
+        ],
+        "CFBundleDocumentTypes": [
+          {
+            "CFBundleTypeName": "Documents",
+            "CFBundleTypeRole": "Viewer",
+            "LSHandlerRank": "Alternate",
+            "LSItemContentTypes": [
+              "com.adobe.pdf",
+              "public.plain-text",
+              "net.daringfireball.markdown",
+              "public.text"
+            ]
+          }
+        ],
+        "LSSupportsOpeningDocumentsInPlace": false,
+        "NSCalendarsFullAccessUsageDescription": "Pocket LLM reads and adds calendar events only when you ask it to.",
+        "NSRemindersFullAccessUsageDescription": "Pocket LLM reads and adds reminders only when you ask it to.",
+        "NSContactsUsageDescription": "Pocket LLM looks up a contact only when you ask it to message or call someone.",
+        "NSLocationWhenInUseUsageDescription": "Pocket LLM uses your location only when you ask about where you are or for directions."
       }
     },
     "android": {
@@ -22,6 +46,7 @@
       }
     },
     "plugins": [
+      "./plugins/local-notifications-only.js",
       [
         "llama.rn",
         {
@@ -44,7 +69,35 @@
         {
           "photosPermission": "Pocket LLM uses the photo you pick so the model can look at it. It stays on your iPhone.",
           "cameraPermission": "Pocket LLM uses the camera only if you choose to take a photo for the model.",
-          "microphonePermission": "Pocket LLM does not use the microphone."
+          "microphonePermission": "Pocket LLM listens only while you are dictating a message."
+        }
+      ],
+      "expo-mail-composer",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Pocket LLM listens only while you are dictating a message.",
+          "speechRecognitionPermission": "Pocket LLM turns what you say into text on your iPhone."
+        }
+      ],
+      "expo-notifications",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Pocket LLM reads and adds calendar events only when you ask it to.",
+          "remindersPermission": "Pocket LLM reads and adds reminders only when you ask it to."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Pocket LLM looks up a contact only when you ask it to message or call someone."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pocket LLM uses your location only when you ask about where you are or for directions."
         }
       ]
     ],
@@ -59,7 +112,7 @@
       "bundler": "metro",
       "output": "single"
     },
-    "runtimeVersion": "1",
+    "runtimeVersion": "2",
     "updates": {
       "url": "https://u.expo.dev/78e63a85-401c-41e2-9642-8edcc22ddc79"
     }
