@@ -32,6 +32,7 @@
         ],
         "LSSupportsOpeningDocumentsInPlace": false,
         "NSCalendarsFullAccessUsageDescription": "Pocket LLM reads and adds calendar events only when you ask it to.",
+        "NSCalendarsWriteOnlyAccessUsageDescription": "Pocket LLM adds a calendar event only when you ask it to and approve it.",
         "NSRemindersFullAccessUsageDescription": "Pocket LLM reads and adds reminders only when you ask it to.",
         "NSContactsUsageDescription": "Pocket LLM looks up a contact only when you ask it to message or call someone.",
         "NSLocationWhenInUseUsageDescription": "Pocket LLM uses your location only when you ask about where you are or for directions."
