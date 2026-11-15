@@ -91,7 +91,6 @@ export default function RunScreen() {
       ) : (
         <ScrollView
           ref={scroll}
-          contentInsetAdjustmentBehavior="automatic"
           style={styles.flex}
           contentContainerStyle={styles.lines}
           onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: false })}

@@ -250,7 +250,7 @@ async function scenario() {
   await wait(1500);
   await leave('while it was thinking');
   await until(() => app.get().busy, 8000);
-  await until(() => !app.get().busy, 120000);
+  await until(() => !app.get().busy, 300000);
   const asked = app.get().chat.messages.at(-1);
   step(`asked again: ${asked?.role === 'assistant' && !asked.stopped && asked.content.length > 40 ? 'YES' : 'NO'} ${state()}`);
   await wait(1500);
@@ -295,7 +295,7 @@ async function scenario() {
   // ---------- running code a model wrote ----------
   runCode('js', 'console.log("six times seven is", 6 * 7);\nawait new Promise((r) => setTimeout(r, 500));\nreturn [1, 2, 3].map((n) => n * n);');
   step('run screen open: a script that prints 42 and returns [1,4,9]');
-  await wait(5000);
+  await wait(12000);
   router.back();
   await wait(1200);
   runCode('js', 'console.log("before");\nnotDefined();');

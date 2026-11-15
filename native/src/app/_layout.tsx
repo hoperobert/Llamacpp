@@ -39,7 +39,8 @@ export default function RootLayout() {
         <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="projects" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="library" options={{ title: 'Library', presentation: 'modal' }} />
-        <Stack.Screen name="run" options={{ title: 'Run', presentation: 'modal' }} />
+        {/* What runs must not slide under the header: a page's own top would be hidden by it. */}
+        <Stack.Screen name="run" options={{ title: 'Run', presentation: 'modal', headerTransparent: false }} />
         <Stack.Screen
           name="options"
           options={{
