@@ -1,19 +1,23 @@
 // Metro configuration: Expo's defaults, plus one switch.
 //
-// A simulator test build (POCKET_SIM=1) runs on a Mac in GitHub Actions, where
-// there is no model to load. It is bundled with the stand-ins from the browser
-// preview in place of the model, the downloads and the library, and with a
-// script that works the app by itself while screenshots are taken. See
-// sim/README.md. Nothing here affects a normal build.
+// A simulator test build runs on a Mac in GitHub Actions. It is bundled with a
+// script that works the app by itself while screenshots are taken, and with
+// POCKET_SIM=1 also with the stand-ins from the browser preview in place of the
+// model, the downloads and the library. See sim/README.md. Nothing here affects
+// a normal build.
 
 const path = require('path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-if (process.env.POCKET_SIM === '1') {
+// POCKET_SIM=real keeps the real engine and downloads, and only adds the script.
+const sim = process.env.POCKET_SIM;
+if (sim === '1' || sim === 'real') {
   const lib = path.join(__dirname, 'src', 'lib');
-  const swaps = { engine: 'engine.web.ts', downloads: 'downloads.web.ts', library: 'library.web.ts', sim: 'sim.run.ts' };
+  const swaps = sim === 'real'
+    ? { sim: 'sim.run.ts' }
+    : { engine: 'engine.web.ts', downloads: 'downloads.web.ts', library: 'library.web.ts', sim: 'sim.run.ts' };
   const upstream = config.resolver.resolveRequest;
   config.resolver.resolveRequest = (context, moduleName, platform) => {
     if (moduleName.startsWith('.')) {

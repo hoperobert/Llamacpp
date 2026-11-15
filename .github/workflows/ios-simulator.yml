@@ -33,11 +33,19 @@ jobs:
       run:
         working-directory: native
     env:
-      POCKET_SIM: '1'
       EXPO_NO_TELEMETRY: '1'
       CI: '1'
     steps:
       - uses: actions/checkout@v4
+
+      # native/sim/run says which kind of test build to make: "real" uses the real
+      # engine and a real small model, "1" the stand-ins from the browser preview.
+      - name: Choose what to test
+        run: |
+          mode="$(head -1 sim/run | tr -d '[:space:]')"
+          case "$mode" in real|1) ;; *) mode=real ;; esac
+          echo "POCKET_SIM=$mode" >> "$GITHUB_ENV"
+          echo "Testing with POCKET_SIM=$mode"
 
       - uses: actions/setup-node@v4
         with:
@@ -70,6 +78,7 @@ jobs:
 
       - name: Build for the simulator
         run: |
+          echo "Building with POCKET_SIM=$POCKET_SIM"
           workspace="$(ls -d ios/*.xcworkspace | head -1)"
           scheme="$(basename "$workspace" .xcworkspace)"
           echo "workspace $workspace, scheme $scheme"
@@ -103,30 +112,64 @@ jobs:
           xcrun simctl bootstatus "$device" -b
           xcrun simctl ui "$device" appearance dark
 
+      # A spare copy of the small model, in case the app's own download of it fails.
+      - uses: actions/cache@v4
+        if: env.POCKET_SIM == 'real'
+        with:
+          path: native/model
+          key: model-qwen35-0.8b-q4_0
+
+      - name: Fetch the spare model
+        if: env.POCKET_SIM == 'real'
+        run: |
+          mkdir -p model
+          [ -s model/Qwen3.5-0.8B-Q4_0.gguf ] || curl -sSL --retry 3 -o model/Qwen3.5-0.8B-Q4_0.gguf \
+            https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf
+          ls -la model
+
       - name: Run the app and take screenshots
         run: |
           app="$(ls -d build/Build/Products/Release-iphonesimulator/*.app | head -1)"
           bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          process="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
           mkdir -p shots
           xcrun simctl install "$DEVICE" "$app"
-          xcrun simctl spawn "$DEVICE" log stream --level debug --predicate 'eventMessage CONTAINS "[sim]"' > shots/log.txt 2>&1 &
+          data="$(xcrun simctl get_app_container "$DEVICE" "$bundle" data)"
+          if [ "$POCKET_SIM" = real ]; then
+            mkdir -p "$data/Documents"
+            cp model/Qwen3.5-0.8B-Q4_0.gguf "$data/Documents/spare-Qwen3.5-0.8B-Q4_0.gguf"
+          fi
+          xcrun simctl spawn "$DEVICE" log stream --level info --predicate "process == \"$process\"" > shots/log-full.txt 2>&1 &
           xcrun simctl launch "$DEVICE" "$bundle"
-          steps=""
+          left=0
           # One screenshot a second, named by the clock, until the app says it has finished.
-          for i in $(seq 1 150); do
+          for i in $(seq 1 420); do
             now="$(python3 -c 'import time; print(int(time.time() * 1000))')"
             xcrun simctl io "$DEVICE" screenshot --type=jpeg "shots/$now.jpg" > /dev/null 2>&1 || true
-            data="$(xcrun simctl get_app_container "$DEVICE" "$bundle" data 2>/dev/null || true)"
-            if [ -n "$data" ] && [ -f "$data/Documents/sim-steps.txt" ]; then
+            if [ -f "$data/Documents/sim-steps.txt" ]; then
               cp "$data/Documents/sim-steps.txt" shots/steps.txt
-              if grep -q finished shots/steps.txt; then break; fi
+              if grep -q " finished " shots/steps.txt; then break; fi
+              # The app asks to be sent to the background and brought back.
+              asked="$(grep -c " LEAVE " shots/steps.txt || true)"
+              if [ "$asked" -gt "$left" ]; then
+                left="$asked"
+                echo "$now leaving the app ($asked)" >> shots/outside.txt
+                xcrun simctl launch "$DEVICE" com.apple.Preferences > /dev/null 2>&1 || true
+                sleep 6
+                xcrun simctl io "$DEVICE" screenshot --type=jpeg "shots/$now-away.jpg" > /dev/null 2>&1 || true
+                xcrun simctl launch "$DEVICE" "$bundle" >> shots/outside.txt 2>&1 || true
+              fi
             fi
             sleep 0.6
           done
+          cat shots/steps.txt || true
           # Half size is plenty to read, and keeps the branch small.
           sips -Z 1320 shots/*.jpg > /dev/null
           ls shots | wc -l
-          cat shots/steps.txt || true
+          # Anything the system recorded about the app closing by itself.
+          cp ~/Library/Logs/DiagnosticReports/*"$process"* shots/ 2>/dev/null || true
+          grep -E "\[sim\]|rror|rash|xception|Terminat|llama|Uncaught" shots/log-full.txt | tail -400 > shots/log.txt || true
+          rm -f shots/log-full.txt
 
       - name: Keep the screenshots
         if: always()
