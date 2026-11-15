@@ -88,10 +88,16 @@ jobs:
           scheme="$(basename "$workspace" .xcworkspace)"
           echo "workspace $workspace, scheme $scheme"
           set -o pipefail
-          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
-            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO \
-            | tee build.log | grep -E "^(\*\*|error|warning: unable|ld:|Undefined|❌)|error:|BUILD" || true
+          # Expo's scan for its modules is given five seconds, which a busy machine can miss.
+          # Building again picks up where it stopped, so it is tried up to three times.
+          for attempt in 1 2 3; do
+            xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
+              -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+              -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO \
+              | tee build.log | grep -E "^(\*\*|error|warning: unable|ld:|Undefined|❌)|error:|BUILD" || true
+            if ls -d build/Build/Products/Release-iphonesimulator/*.app > /dev/null 2>&1; then break; fi
+            echo "Attempt $attempt did not finish."
+          done
           tail -5 build.log
           ls -d build/Build/Products/Release-iphonesimulator/*.app
 

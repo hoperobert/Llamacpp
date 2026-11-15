@@ -77,7 +77,16 @@ jobs:
       # The same build Expo's service would make, made on this machine. The
       # signing certificate and profile are fetched from Expo with the token.
       - name: Build
-        run: npx --yes eas-cli@27.10.0 build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/PocketLLM.ipa"
+        run: |
+          # Expo's scan for its modules is given five seconds, which a busy machine can miss.
+          # A second try is all it needs.
+          for attempt in 1 2; do
+            if npx --yes eas-cli@27.10.0 build --local --platform ios --profile production --non-interactive --output "$RUNNER_TEMP/PocketLLM.ipa"; then
+              break
+            fi
+            echo "Attempt $attempt did not finish."
+          done
+          test -f "$RUNNER_TEMP/PocketLLM.ipa"
 
       - name: Send to TestFlight
         run: npx --yes eas-cli@27.10.0 submit --platform ios --profile production --path "$RUNNER_TEMP/PocketLLM.ipa" --non-interactive --no-wait
