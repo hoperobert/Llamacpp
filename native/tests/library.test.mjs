@@ -71,6 +71,46 @@ assert.deepEqual(await top('zxqv'), []);
 const canberra = await library.lookup('Walter Burley Griffin Canberra', 5);
 assert.ok(canberra.filter((p) => p.title === 'Canberra').length <= 2, 'one article does not crowd out the rest');
 
+// ---------- several sources ----------
+const { best, STRONG, WEAK, EVERY_WORD, SOME_WORDS } = await import('../src/lib/retrieval.ts');
+const find = (source, title, score, pos = 0, body = `${title} ${source} ${pos}`) => ({ source, title, score, pos, body });
+assert.deepEqual(
+  best([find('a', 'Mount Everest', STRONG + 32), find('b', 'Mount Everest', STRONG + 32), find('b', 'Oceanic zone', EVERY_WORD)]).map((p) => `${p.source}/${p.title}`),
+  ['a/Mount Everest', 'b/Oceanic zone'], 'the same article from two sources is given once',
+);
+assert.deepEqual(
+  best([find('a', 'Ada Lovelace', STRONG + 22), find('b', 'Consciousness', EVERY_WORD, 33), find('a', 'Lovelace', EVERY_WORD - 1)]).map((p) => p.title),
+  ['Ada Lovelace', 'Lovelace'], 'a passing mention in another source is left out when the subject was found',
+);
+assert.deepEqual(
+  best([find('a', 'Bowline knot', STRONG + 31), find('b', 'Knot', WEAK + 11), find('b', 'Rope', WEAK + 11)]).map((p) => p.title),
+  ['Bowline knot'], 'a looser match adds nothing beside the subject',
+);
+assert.deepEqual(
+  best([find('a', 'Drain', WEAK + 11), find('b', 'Sodium hydroxide', EVERY_WORD), find('c', 'Rain', SOME_WORDS)]).map((p) => p.title),
+  ['Drain', 'Sodium hydroxide', 'Rain'], 'with no sure subject the best of everything is kept',
+);
+
+// A guide is found without the "How to" every title starts with, and its parts are joined under one title.
+const howto = library.SOURCES.find((s) => s.id === 'howto');
+writeBytes(howto.file, fs.readFileSync(new URL('./fixtures/howto.parquet', import.meta.url)));
+await library.prepare(howto);
+assert.equal(states.at(-1).status, 'ready');
+const guides = files.get('library-howto.db').prepare('SELECT DISTINCT title FROM passages ORDER BY title').all().map((r) => r.title);
+assert.deepEqual(guides, ['Tie a Tie', 'Treat a Burn']);
+assert.equal((await top('how do i tie a tie'))[0], 'Tie a Tie');
+assert.equal((await top('how to treat a burn'))[0], 'Treat a Burn');
+assert.equal((await top('What is the capital of Australia?'))[0], 'Australia', 'the other source still answers its own');
+
+// A dictionary has an entry for every word, so it only answers when asked about one.
+const { retrieve } = await import('../src/lib/retrieval.ts');
+const words = files.get('library-howto.db');
+const ask = (question, options) => retrieve(async (sql, params) => words.prepare(sql).all(...params), question, 3, options);
+assert.equal((await ask('how hot should water be to treat a burn', { entriesOnly: true })).length, 1);
+assert.deepEqual(await ask('is ice good for a burn', { entriesOnly: true }), []);
+assert.ok((await ask('is ice good for a burn')).length > 0);
+await library.removeSource(howto);
+
 // ---------- your own files ----------
 let mine = await library.addText('boiler.txt', 'The boiler pressure should be between 1 and 1.5 bar. Top it up with the silver tap.');
 assert.deepEqual(mine, [{ name: 'boiler.txt', passages: 1 }]);

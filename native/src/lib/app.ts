@@ -775,7 +775,16 @@ export async function summariseNow() {
 // ---------- the offline library ----------
 
 /** Downloads a library source. Its index is built when it arrives. */
-export const installSource = (source: Source) => download(sourceDownload(source));
+export function installSource(source: Source) {
+  // The index is built beside the download, so both have to fit until it is done.
+  const free = freeDiskMB();
+  const needed = source.sizeMB + source.diskMB;
+  if (free !== null && !app.get().downloads[sourceDownload(source).id] && needed + 300 > free) {
+    Alert.alert('Not enough storage', `${source.name} needs ${formatMB(needed)} and this iPhone has ${formatMB(free)} free.`);
+    return;
+  }
+  download(sourceDownload(source));
+}
 
 export function deleteSource(source: Source) {
   Alert.alert(`Remove ${source.name}?`, 'It will be deleted from this iPhone.', [

@@ -10,32 +10,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, FileMode, Paths } from 'expo-file-system';
 import * as SQLite from 'expo-sqlite';
 import { parquetMetadataAsync, parquetRead } from 'hyparquet/src/index.js';
-import type { Model } from './models';
-import { chunk, LIBRARY_SCHEMA, retrieve, type Passage, type Query } from './retrieval';
+import { best, chunk, LIBRARY_SCHEMA, retrieve, type Passage, type Query } from './retrieval';
+import { SOURCES, type Source } from './sources';
 
-export type Source = {
-  id: string;
-  name: string;
-  note: string;
-  /** Size of the download. */
-  sizeMB: number;
-  /** Space the finished index takes on the phone. */
-  diskMB: number;
-  file: string;
-  url: string;
-};
-
-export const SOURCES: Source[] = [
-  {
-    id: 'wiki-simple',
-    name: 'Wikipedia',
-    note: 'Simple English · 242,000 articles',
-    sizeMB: 157,
-    diskMB: 500,
-    file: 'wikipedia-simple.parquet',
-    url: 'https://huggingface.co/datasets/wikimedia/wikipedia/resolve/main/20231101.simple/train-00000-of-00001.parquet',
-  },
-];
+export { SOURCES, sourceDownload, sourceForDownload, type Source } from './sources';
 
 export type SourceState = {
   status: 'preparing' | 'ready' | 'failed';
@@ -63,19 +41,6 @@ const preparing = new Set<string>();
 
 const dbName = (source: Source) => `library-${source.id}.db`;
 const savedKey = (id: string) => `library:${id}`;
-
-/** A source's download, in the shape the download code works with. */
-export const sourceDownload = (source: Source): Model => ({
-  id: `library-${source.id}`,
-  name: source.name,
-  note: source.note,
-  sizeMB: source.sizeMB,
-  file: source.file,
-  url: source.url,
-  group: 'custom',
-});
-
-export const sourceForDownload = (downloadId: string) => SOURCES.find((s) => `library-${s.id}` === downloadId);
 
 function open(name: string): Promise<SQLite.SQLiteDatabase> {
   let db = databases.get(name);
@@ -142,6 +107,16 @@ function reader(file: File) {
 // ---------- Wikipedia and other downloaded sources ----------
 
 /**
+ * A title as it should read: one line, without the numbering some sources add
+ * ("How to Tie a Knot2") or the words every title in a source starts with.
+ */
+function tidyTitle(title: string, source: Source): string {
+  const clean = title.replace(/\s+/g, ' ').trim().replace(/(?<=[a-z])\d+$/, '');
+  const start = source.titlesStartWith;
+  return start && clean.toLowerCase().startsWith(start.toLowerCase()) ? clean.slice(start.length).trim() : clean;
+}
+
+/**
  * Builds the index for a downloaded source. The file holds its articles in
  * groups of a thousand; each group is indexed and recorded before the next,
  * so if the app is closed part-way it carries on from where it stopped.
@@ -164,16 +139,19 @@ export async function prepare(source: Source) {
     for (let g = 0; g < groups.length; g++) {
       const count = Number(groups[g].num_rows);
       if (g >= saved.groups) {
-        const articles = await new Promise<{ title: string; text: string }[]>((resolve, reject) => {
+        const { title, text } = source.columns;
+        const entries = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
           parquetRead({
             file: input!, metadata, rowStart, rowEnd: rowStart + count,
-            columns: ['title', 'text'], rowFormat: 'object',
-            onComplete: (rows) => resolve(rows as { title: string; text: string }[]),
+            columns: [title, text], rowFormat: 'object',
+            onComplete: (rows) => resolve(rows as Record<string, unknown>[]),
           }).catch(reject);
         });
         const rows: Passage[] = [];
-        for (const article of articles) {
-          chunk(article.text ?? '').forEach((body, pos) => rows.push({ title: article.title, body, source: source.id, pos }));
+        for (const entry of entries) {
+          const name = tidyTitle(String(entry[title] ?? ''), source);
+          if (!name) continue;
+          chunk(String(entry[text] ?? '')).forEach((body, pos) => rows.push({ title: name, body, source: source.id, pos }));
         }
         await db.withTransactionAsync(() => insert(db, rows));
         saved = { groups: g + 1, passages: saved.passages + rows.length, ready: false };
@@ -268,21 +246,17 @@ export const libraryReady = () => searchable.size > 0;
 
 /** Finds the passages in the library most likely to answer a question. */
 export async function lookup(question: string, limit = 3): Promise<Passage[]> {
-  const found: Passage[][] = [];
-  for (const name of searchable) {
+  const found: Passage[] = [];
+  // Your own files are searched first, so that between equal finds theirs win.
+  for (const name of [...searchable].sort((x, y) => Number(y === FILES_DB) - Number(x === FILES_DB))) {
     try {
       const db = await open(name);
       const query: Query = (sql, params) => db.getAllAsync(sql, params);
-      found.push(await retrieve(query, question, limit));
+      const entriesOnly = SOURCES.some((source) => dbName(source) === name && source.entriesOnly);
+      found.push(...(await retrieve(query, question, limit, { entriesOnly })));
     } catch {
       // A source that cannot be read is skipped.
     }
   }
-  // Take the best from each source in turn. Your own files come first.
-  const ordered = found.sort((a, b) => Number(b[0]?.source !== 'wiki-simple') - Number(a[0]?.source !== 'wiki-simple'));
-  const out: Passage[] = [];
-  for (let i = 0; out.length < limit && ordered.some((list) => i < list.length); i++) {
-    for (const list of ordered) if (list[i] && out.length < limit) out.push(list[i]);
-  }
-  return out;
+  return best(found, limit);
 }

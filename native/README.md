@@ -62,10 +62,21 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   length are set from the "+" in the message box.
 - **Photos** can be sent to models that can look at them (Qwen3.5 2B and 4B,
   Gemma 4 E2B) after a one-off add-on download for that model.
-- **Look up** answers from an offline library instead of the web: Simple
-  English Wikipedia (a 157 MB download, about 500 MB once indexed) and text
-  files of your own. The passages that fit a question are found on the phone
-  and handed to the model with it; their titles show under your message.
+- **Look up** answers from an offline library instead of the web. The
+  passages that fit a question are found on the phone and handed to the model
+  with it; their titles show under your message. The library holds text files
+  of your own and any of these downloads:
+
+  | Source | Holds | Download | On the phone |
+  |---|---|---|---|
+  | Wikipedia | Simple English, 242,000 articles | 157 MB | 500 MB |
+  | Wikipedia in depth | The 50,000 most important English articles, in full | 674 MB | 2.1 GB |
+  | Medicine | 6,800 medical articles | 33 MB | 100 MB |
+  | Dictionary | 112,000 definitions | 9 MB | 30 MB |
+  | How-to guides | 180,000 wikiHow guides | 287 MB | 900 MB |
+
+  Another source is one entry in `src/lib/sources.ts`: a Parquet file with a
+  column of titles and a column of text.
 - **Projects** group chats that share instructions.
 - **Incognito chats** are never saved, named or used for memories.
 - **Any message** you sent can be taken back and changed.
@@ -125,7 +136,8 @@ script and that setting.
 | `src/lib/logic.ts` | Prompt building, context compaction, titles and memories. |
 | `src/lib/models.ts` | The model catalogue and how well each suits a device. |
 | `src/lib/db.ts` | The SQLite database: chats, messages, projects and memories. |
-| `src/lib/library.ts` | The offline library: indexing Wikipedia and your files. |
+| `src/lib/sources.ts` | What can be downloaded into the offline library. |
+| `src/lib/library.ts` | The offline library: indexing those downloads and your files. |
 | `src/lib/retrieval.ts` | Choosing the passages that fit a question. |
 | `src/lib/images.ts` | Photos attached to messages. |
 | `src/lib/storage.ts` | Settings and other small preferences. |

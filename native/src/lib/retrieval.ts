@@ -11,6 +11,8 @@ export type Passage = {
   source: string;
   /** Position of the passage in its article. 0 is the opening. */
   pos: number;
+  /** How good a find it is, so finds from several sources can be put in order. */
+  score?: number;
 };
 
 export type Query = <T>(sql: string, params: (string | number)[]) => Promise<T[]>;
@@ -58,10 +60,28 @@ const STOP = new Set((
   'a an and are as at be been but by can could did do does for from had has have he her him his how i if in into ' +
   'is it its me my of on or our she should so than that the their them then there these they this to was we were ' +
   'what when where which who whom why will with would you your about tell explain describe give show list please ' +
-  'know like just also much many some any most more very between during after before over under again whats'
+  'know like just also much many some any most more very between during after before over under again whats ' +
+  'define definition meaning mean means word'
 ).split(' '));
 
-const wordsOf = (text: string) => text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+// Accents are dropped, as the index drops them: "Pokémon" is found by "pokemon".
+const wordsOf = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+
+const ENDINGS = ['s', 'es', 'ing', 'ed', 'd'];
+
+/** True when two words are the same give or take an ending: "vaccines" and "vaccine", not "capital" and "capitalism". */
+function sameWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  if (short.endsWith('y') && long === `${short.slice(0, -1)}ies`) return true;
+  return long.startsWith(short) && ENDINGS.includes(long.slice(short.length));
+}
+
+/** True when a title is the phrase itself, not merely something that contains it. */
+function titleIs(title: string, phrase: string[]): boolean {
+  const words = wordsOf(title);
+  return words.length === phrase.length && words.every((w, i) => sameWord(w, phrase[i]));
+}
 
 /** The words of a question worth searching for. */
 export function terms(question: string): string[] {
@@ -97,6 +117,44 @@ function coverage(passage: Passage, wanted: string[]): number {
 const listsMeanings = (passage: Passage) =>
   passage.pos === 0 && /\b(?:may|can|could)(?: also)? (?:refer to|mean|be:)/i.test(passage.body.slice(0, 160));
 
+// What a find is worth, so that finds from several sources can be put in one order:
+// an article that is surely the subject, a passage further into it, an article
+// that may be the subject, a passage with every word of the question, and a
+// passage with some of them.
+export const STRONG = 1000;
+export const FURTHER = 900;
+export const WEAK = 700;
+export const EVERY_WORD = 500;
+export const SOME_WORDS = 100;
+
+/**
+ * Puts the finds from several sources in one order and keeps the best.
+ * It leaves out what would only be noise beside a better find.
+ */
+export function best(found: Passage[], limit = 3): Passage[] {
+  const ordered = [...found].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const sure = ordered.filter((p) => (p.score ?? 0) >= STRONG);
+  // Sources that have an article on the subject. With one found, the others have only passing mentions.
+  const onSubject = new Set(sure.map((p) => p.source));
+  const kept: Passage[] = [];
+  for (const passage of ordered) {
+    const score = passage.score ?? 0;
+    const words = wordsOf(passage.title);
+    if (sure.length && score < FURTHER && !onSubject.has(passage.source)) continue;
+    // The same article, or the same passage, from two sources is given once.
+    if (kept.some((k) => k.pos === passage.pos && wordsOf(k.title).join(' ') === words.join(' '))) continue;
+    if (kept.some((k) => k.body.slice(0, 120) === passage.body.slice(0, 120))) continue;
+    // "Knot" adds nothing beside "Bowline knot".
+    if (score >= WEAK && score < FURTHER && sure.some((k) => {
+      const others = wordsOf(k.title);
+      return others.length > words.length && words.every((w) => others.some((o) => sameWord(o, w)));
+    })) continue;
+    kept.push(passage);
+    if (kept.length >= limit) break;
+  }
+  return kept;
+}
+
 const RANK = `bm25(passages, 8.0, 1.0) * (CASE WHEN pos = 0 THEN 1.5 ELSE 1 END)`;
 const COLUMNS = `title, body, source, pos`;
 
@@ -107,14 +165,20 @@ const COLUMNS = `title, body, source, pos`;
  * title is a phrase from the question), then for passages that mention the
  * question's words, favouring the openings of articles.
  */
-export async function retrieve(query: Query, question: string, limit = 3): Promise<Passage[]> {
+export async function retrieve(
+  query: Query, question: string, limit = 3,
+  // A dictionary has an entry for every word of a question, so it is only asked about what the question is surely about.
+  { entriesOnly = false }: { entriesOnly?: boolean } = {},
+): Promise<Passage[]> {
   const wanted = terms(question);
   if (!wanted.length) return [];
   const chosen: Passage[] = [];
   const perTitle = new Map<string, number>();
   const taken = new Set<string>();
-  const add = (rows: Passage[]) => {
-    for (const row of rows) {
+  // Articles about the subject count for most, then passages with every word, then with some.
+  const add = (rows: Passage[], worth: number) => {
+    for (const [i, found] of rows.entries()) {
+      const row = { ...found, score: found.score ?? worth - i };
       const key = `${row.source}/${row.title}#${row.pos}`;
       const count = perTitle.get(row.title) ?? 0;
       if (taken.has(key) || count >= 2 || chosen.length >= limit || listsMeanings(row)) continue;
@@ -125,24 +189,23 @@ export async function retrieve(query: Query, question: string, limit = 3): Promi
   };
 
   // 1. Articles named after something in the question.
-  const subjects: { passage: Passage; score: number; meaning?: boolean }[] = [];
+  const subjects: { passage: Passage; score: number; meaning?: boolean; sure?: boolean }[] = [];
   const covered = new Set<string>();
   for (const guess of titleGuesses(question)) {
     if (guess.every((w) => covered.has(w))) continue;
     const phrase = guess.join(' ');
     const rows = await query<Passage>(
-      `SELECT ${COLUMNS} FROM passages WHERE passages MATCH ? AND pos = 0 ORDER BY length(title) LIMIT 1`,
+      `SELECT ${COLUMNS} FROM passages WHERE passages MATCH ? AND pos = 0 ORDER BY length(title) LIMIT 4`,
       [`title : ${quote(phrase)}`],
     );
-    const hit = rows[0];
-    // The title has to be the phrase itself, give or take an ending, not merely contain it.
-    if (!hit || hit.title.length > phrase.length + 3) continue;
+    const hit = rows.find((row) => titleIs(row.title, guess));
+    if (!hit) continue;
     if (listsMeanings(hit)) {
       // The word has several meanings, each with its own article, which the page lists:
       // "Mercury (planet)". The ones that speak to the rest of the question go first.
       const names = [...hit.body.matchAll(/^([^\n(]+ \([^)\n]+\))/gm)]
         .map((m) => m[1].trim())
-        .filter((name) => name.toLowerCase().startsWith(`${phrase} (`))
+        .filter((name) => wordsOf(name).slice(0, guess.length).join(' ') === phrase)
         .slice(0, 4);
       const meanings: Passage[] = [];
       for (const name of names) {
@@ -159,7 +222,7 @@ export async function retrieve(query: Query, question: string, limit = 3): Promi
         // In a longer question a meaning has to fit the rest of it: "capital of Australia" is not about money.
         if (wanted.length > 1 && !named && speaksTo < 2) continue;
         guess.forEach((w) => covered.add(w));
-        subjects.push({ passage, score: (speaksTo + named * 3) * 10 + guess.length, meaning: true });
+        subjects.push({ passage, score: STRONG + (speaksTo + named * 3) * 10 + guess.length, meaning: true });
       }
       continue;
     }
@@ -167,30 +230,46 @@ export async function retrieve(query: Query, question: string, limit = 3): Promi
     const specific = guess.length > 1 || guess[0].length >= 5;
     if (!specific && coverage(hit, wanted) < Math.min(2, wanted.length)) continue;
     guess.forEach((w) => covered.add(w));
-    subjects.push({ passage: hit, score: coverage(hit, wanted) * 10 + guess.length });
+    const speaksTo = coverage(hit, wanted);
+    // A phrase, or an article that speaks to the whole question, is surely the subject. One word of several may not be.
+    const sure = guess.length > 1 || speaksTo >= wanted.length;
+    subjects.push({ passage: hit, score: (sure ? STRONG : WEAK) + speaksTo * 10 + guess.length, sure });
   }
-  // The best subject always counts. A second one has to be a phrase, or speak to more of the question.
+  // The best subject always counts. A second one has to be a sure one.
   subjects.sort((a, b) => b.score - a.score);
-  add(
-    subjects
-      .filter((s, i) => i === 0 || s.meaning || s.score % 10 > 1 || s.score >= 20)
-      .slice(0, 2)
-      .map((s) => s.passage),
-  );
+  const picked = subjects.filter((s, i) => (i === 0 && !entriesOnly) || s.meaning || s.sure).slice(0, 2);
+  add(picked.map((s) => ({ ...s.passage, score: s.score })), STRONG);
+  if (entriesOnly) return chosen;
+
+  // The answer is often further down the subject's article than its opening:
+  // the passage of it that says most about the rest of the question.
+  const subject = picked[0];
+  if (subject && subject.score >= STRONG && chosen.length < limit) {
+    const title = wordsOf(subject.passage.title);
+    const rest = wanted.filter((w) => !title.some((t) => sameWord(t, w)));
+    if (rest.length) {
+      const deeper = await query<Passage>(
+        `SELECT ${COLUMNS} FROM passages WHERE passages MATCH ? AND pos > 0 ORDER BY bm25(passages, 0.0, 1.0) LIMIT 8`,
+        [`(title : ${quote(title.join(' '))}) AND (${rest.map(quote).join(' OR ')})`],
+      );
+      add(deeper.filter((row) => row.title === subject.passage.title).slice(0, 1), FURTHER);
+    }
+  }
+  const found = chosen.some((p) => (p.score ?? 0) >= STRONG);
 
   // 2. Passages that hold every word of the question.
   if (chosen.length < limit && wanted.length > 1) {
     add(await query<Passage>(
       `SELECT ${COLUMNS} FROM passages WHERE passages MATCH ? ORDER BY ${RANK} LIMIT ?`,
       [wanted.map(quote).join(' AND '), limit * 3],
-    ));
+    ), EVERY_WORD);
   }
-  // 3. Failing that, the passages that hold the most of them.
-  if (chosen.length < limit) {
+  // 3. Failing that, the passages that hold the most of them. Beside the subject itself they would only be noise.
+  if (chosen.length < limit && !found) {
     add(await query<Passage>(
       `SELECT ${COLUMNS} FROM passages WHERE passages MATCH ? ORDER BY ${RANK} LIMIT ?`,
       [wanted.map(quote).join(' OR '), limit * 4],
-    ));
+    ), SOME_WORDS);
   }
   return chosen;
 }
