@@ -160,3 +160,24 @@ assert.deepEqual(
 assert.deepEqual(takingTurns([{ role: 'user', content: '', image: 'a.jpg' }, { role: 'user', content: 'what is this' }]), [{ role: 'user', content: 'what is this', image: 'a.jpg' }]);
 assert.deepEqual(takingTurns([]), []);
 console.log('turns: all checks passed');
+
+// ---------- thinking that turns up in the reply ----------
+const { splitThinking } = await import('../src/lib/text.ts');
+// Gemma 4, as it appeared on the phone: its thinking in the reply, markers and all.
+const gemma = '<|channel>thought\nThinking Process:\n\n1. **Analyze the Request:** The user wants to know what plant this is.\n<channel|>This looks like low-growing ground cover, but the photo is too blurry to name it.';
+assert.deepEqual(splitThinking(gemma), {
+  content: 'This looks like low-growing ground cover, but the photo is too blurry to name it.',
+  reasoning: 'Thinking Process:\n\n1. **Analyze the Request:** The user wants to know what plant this is.',
+});
+// Still being written: the block is open, so there is no answer yet.
+assert.deepEqual(splitThinking('<|channel>thought\nThinking Process:\n1. Analyze'), { content: '', reasoning: 'Thinking Process:\n1. Analyze' });
+assert.deepEqual(splitThinking('<think>Let me see.</think>\n\nParis.'), { content: 'Paris.', reasoning: 'Let me see.' });
+assert.deepEqual(splitThinking('<think>half a thought'), { content: '', reasoning: 'half a thought' });
+// A model that starts out thinking only ever writes the closing marker.
+assert.deepEqual(splitThinking('The user said hi.\n</think>\n\nHello!'), { content: 'Hello!', reasoning: 'The user said hi.' });
+assert.deepEqual(splitThinking('First.<think>a</think> Second.<think>b</think>').reasoning, 'a\n\nb');
+assert.deepEqual(splitThinking('Plain answer with a < b and x > y.'), { content: 'Plain answer with a < b and x > y.', reasoning: '' });
+assert.equal(splitThinking('Done.<turn|>').content, 'Done.');
+assert.equal(splitThinking('<|channel>final\nThe answer is 4.').content, 'The answer is 4.');
+assert.equal(withoutThinking(gemma), 'This looks like low-growing ground cover, but the photo is too blurry to name it.');
+console.log('thinking: all checks passed');

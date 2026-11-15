@@ -3,6 +3,7 @@
 import { AppState } from 'react-native';
 import { BuildInfo, initLlama, loadLlamaModelInfo, type LlamaContext } from 'llama.rn';
 import { imageUri } from './images';
+import { splitThinking } from './text';
 
 let context: LlamaContext | null = null;
 let vision = false;
@@ -135,17 +136,21 @@ export async function chat(
       raw += data.token;
       // With a chat template, llama.rn reports the parsed text so far.
       const parsed = data.content !== undefined || data.reasoning_content !== undefined;
-      const content = parsed ? data.content ?? '' : raw;
-      const reasoning = data.reasoning_content ?? '';
+      // The engine does not recognise every model's way of marking its thinking,
+      // so what it calls the answer is gone through once more.
+      const said = splitThinking(parsed ? data.content ?? '' : raw);
+      const content = said.content;
+      const reasoning = [data.reasoning_content ?? '', said.reasoning].filter(Boolean).join('\n\n');
       if (reasoning) sawReasoning = true;
       if (content && !answerAt) answerAt = Date.now();
       onUpdate(content, reasoning);
     },
   );
   const t = result.timings;
-  const reasoning = (result.reasoning_content ?? '').trim();
+  const said = splitThinking(result.content ?? result.text ?? '');
+  const reasoning = [(result.reasoning_content ?? '').trim(), said.reasoning].filter(Boolean).join('\n\n');
   return {
-    content: (result.content ?? result.text ?? '').trim(),
+    content: said.content,
     reasoning,
     timings: {
       used: (t?.cache_n ?? 0) + (t?.prompt_n ?? 0) + (t?.predicted_n ?? 0),

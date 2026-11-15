@@ -1,14 +1,46 @@
 // Tidying up what a model writes when it is asked for something short.
 
-/** Removes a model's thinking, and any stray thinking tags, from its output. */
-export function withoutThinking(raw: string): string {
-  return raw
-    .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, ' ')
-    // An opening tag that was never closed: everything after it is thinking.
-    .replace(/<think(?:ing)?>[\s\S]*$/i, ' ')
-    .replace(/<\/?think(?:ing)?>/gi, ' ')
-    .trim();
+// How models mark their thinking. Most wrap it in <think> tags. Gemma 4 puts
+// it in a "channel": <|channel>thought ... <channel|>. The engine is meant to
+// take these out and hand the thinking over separately, but does not always
+// (it missed Gemma 4's), and then the markers and the thinking turn up in the
+// reply itself.
+const OPEN = String.raw`<think(?:ing)?>|<\|channel>(?:thought|thinking|analysis|reasoning)\b[ \t]*\n?`;
+const CLOSE = String.raw`<\/think(?:ing)?>|<channel\|>`;
+const BLOCK = new RegExp(`(?:${OPEN})([\\s\\S]*?)(?:${CLOSE})`, 'gi');
+const UNCLOSED = new RegExp(`(?:${OPEN})([\\s\\S]*)$`, 'i');
+const UNOPENED = new RegExp(`^([\\s\\S]*?)(?:${CLOSE})`, 'i');
+// Markers that mean nothing to a reader if any are left over.
+const STRAY = /<\/?think(?:ing)?>|<\|channel>\w*[ \t]*\n?|<channel\|>|<\|?(?:turn|im_start|im_end|end_of_turn|start_of_turn|eot_id)\|?>/gi;
+
+/**
+ * Separates what a model wrote into its answer and its thinking, whichever way
+ * the thinking is marked. Works on a reply that is still being written: a
+ * block that has been opened and not yet closed is all thinking so far.
+ */
+export function splitThinking(raw: string): { content: string; reasoning: string } {
+  const thoughts: string[] = [];
+  let rest = raw.replace(BLOCK, (_all, thought: string) => {
+    thoughts.push(thought.trim());
+    return '\n';
+  });
+  // Some models begin already thinking, so only the closing marker appears.
+  rest = rest.replace(UNOPENED, (_all, thought: string) => {
+    if (thought.trim()) thoughts.unshift(thought.trim());
+    return '';
+  });
+  rest = rest.replace(UNCLOSED, (_all, thought: string) => {
+    thoughts.push(thought.trim());
+    return '';
+  });
+  return {
+    content: rest.replace(STRAY, '').replace(/\n{3,}/g, '\n\n').trim(),
+    reasoning: thoughts.filter(Boolean).join('\n\n').replace(STRAY, '').trim(),
+  };
 }
+
+/** Removes a model's thinking, and any stray thinking markers, from its output. */
+export const withoutThinking = (raw: string): string => splitThinking(raw).content;
 
 /**
  * Turns a model's reply into a chat title, or '' if nothing usable is left.

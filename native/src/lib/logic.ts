@@ -55,7 +55,8 @@ export function promptMessages(chat: Chat, settings: Settings, memories: Memory[
     // so the conversation it has already read stays the same.
     // A request typed as a command ("/plan a trip") is written out in full here.
     .map(({ role, content, image, context }) => {
-      const said = role === 'user' ? expandCommand(content) : content;
+      // The model's own earlier thinking is never read back to it.
+      const said = role === 'user' ? expandCommand(content) : withoutThinking(content);
       return { role, image, content: context ? withReferences(said, context) : said };
     });
   return [

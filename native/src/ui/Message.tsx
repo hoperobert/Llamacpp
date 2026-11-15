@@ -1,11 +1,12 @@
 // One message in a chat: the user's bubble, or the assistant's reply with its
 // thinking, its actions and its speed.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActionSheetIOS, Animated, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { app, copyText, editMessage, regenerate, send, shareText, speak } from '../lib/app';
 import { imageUri } from '../lib/images';
 import type { Message } from '../lib/storage';
+import { splitThinking } from '../lib/text';
 import { Icon, type IconName } from './Icon';
 import { Markdown } from './Markdown';
 import type { Theme } from './theme';
@@ -38,7 +39,17 @@ function menu(message: Message, canEdit?: boolean) {
 }
 
 export const MessageRow = React.memo(function MessageRow(p: Props) {
-  const { t, message, streaming, divider } = p;
+  const { t, streaming, divider } = p;
+  // A reply saved before thinking markers were all recognised may still have its thinking in it.
+  const message = useMemo(() => {
+    if (p.message.role !== 'assistant' || !/<\/?think|channel\|?>/i.test(p.message.content)) return p.message;
+    const said = splitThinking(p.message.content);
+    return {
+      ...p.message,
+      content: said.content,
+      reasoning: [p.message.reasoning, said.reasoning].filter(Boolean).join('\n\n') || undefined,
+    };
+  }, [p.message]);
   const onLongPress = () => menu(message, p.canEdit);
   return (
     <View style={styles.wrap}>
@@ -86,7 +97,7 @@ export const MessageRow = React.memo(function MessageRow(p: Props) {
               )}
             </View>
           )}
-          {!streaming && !!message.content && <Actions {...p} />}
+          {!streaming && !!message.content && <Actions {...p} message={message} />}
         </View>
       )}
     </View>

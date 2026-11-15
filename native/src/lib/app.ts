@@ -776,7 +776,8 @@ export async function send(text: string, photo: string | null = null) {
   const image = photo && fresh && !chat.incognito ? await keepImage(photo) : photo ?? undefined;
   // "/plan a trip to Rome" is about a trip to Rome.
   const subject = subjectOf(text);
-  const found = await lookUp(subject, chat);
+  // A question that comes with a photo is about the photo, not about the words in it.
+  const found = photo ? {} : await lookUp(subject, chat);
   await saveChat({
     ...chat,
     title: chat.messages.length ? chat.title : (subject || 'Photo').replace(/\s+/g, ' ').slice(0, 48),
@@ -792,8 +793,12 @@ export async function send(text: string, photo: string | null = null) {
 async function lookUp(text: string, chat: Chat): Promise<{ context?: string; sources?: string[] }> {
   if (!app.get().settings.lookup || !libraryReady() || !worthLookingUp(text)) return {};
   // A short follow-up ("how tall is it?") only makes sense with the question before it.
-  const previous = [...chat.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-  const question = text.split(/\s+/).length < 6 && previous ? `${previous} ${text}` : text;
+  const before = [...chat.messages].reverse().find((m) => m.role === 'user');
+  const followUp = text.split(/\s+/).length < 6;
+  // If that question was about a photo, so is this one.
+  if (followUp && before?.image) return {};
+  const previous = before?.content ?? '';
+  const question = followUp && previous ? `${previous} ${text}` : text;
   const found = worthUsing(await lookup(question, 3, asks(text)).catch(() => []), text);
   // What the model was already given earlier in this chat is still in front of it.
   const given = chat.messages.slice(chat.cut).map((m) => m.context ?? '').join('\n');
