@@ -23,6 +23,9 @@ function useKeyboardOpen(): boolean {
   return open;
 }
 
+/** The text field, so the keyboard can be raised and lowered from elsewhere. */
+export const composerInput = React.createRef<React.ComponentRef<typeof TextInput>>();
+
 export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number) => void }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -119,6 +122,7 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
           </View>
         )}
         <TextInput
+          ref={composerInput}
           value={draft}
           onChangeText={(text) => app.set({ draft: text })}
           multiline

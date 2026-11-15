@@ -3,6 +3,7 @@ import { Appearance } from 'react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { app, start } from '../lib/app';
+import { runSim } from '../lib/sim';
 import '../lib/preview';
 import { useTheme } from '../ui/theme';
 
@@ -10,7 +11,7 @@ export default function RootLayout() {
   const t = useTheme();
   const choice = app.use((s) => s.settings.theme);
 
-  useEffect(() => { start(); }, []);
+  useEffect(() => { start(); runSim(); }, []);
 
   // Make the system's own controls (sheets, switches, menus) follow the theme
   // chosen in Settings, not only the parts this app draws.

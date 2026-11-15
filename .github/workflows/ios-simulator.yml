@@ -1,0 +1,142 @@
+# Runs the app in an iOS simulator and keeps screenshots of it.
+#
+# The app's keyboard and layout behaviour can only be seen on iOS. This builds
+# a test version that works itself through the cases that have gone wrong on a
+# real iPhone (native/src/lib/sim.run.ts), takes a screenshot every second, and
+# puts them on the `sim-screenshots` branch. See native/sim/README.md.
+#
+# It runs when native/sim/run is changed, or by hand.
+
+name: iOS simulator
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['claude/**']
+    paths:
+      - 'native/sim/run'
+      - '.github/workflows/ios-simulator.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-simulator
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 75
+    defaults:
+      run:
+        working-directory: native
+    env:
+      POCKET_SIM: '1'
+      EXPO_NO_TELEMETRY: '1'
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: native/package-lock.json
+
+      - name: Use the newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          newest="$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)"
+          sudo xcode-select -s "$newest"
+          xcodebuild -version
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Make the iOS project
+        run: npx expo prebuild --platform ios --no-install
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            native/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('native/package-lock.json', 'native/app.json') }}
+
+      - name: Install pods
+        run: cd ios && pod install
+
+      - name: Build for the simulator
+        run: |
+          workspace="$(ls -d ios/*.xcworkspace | head -1)"
+          scheme="$(basename "$workspace" .xcworkspace)"
+          echo "workspace $workspace, scheme $scheme"
+          set -o pipefail
+          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO \
+            | tee build.log | grep -E "^(\*\*|error|warning: unable|ld:|Undefined|❌)|error:|BUILD" || true
+          tail -5 build.log
+          ls -d build/Build/Products/Release-iphonesimulator/*.app
+
+      - name: Start a simulator
+        run: |
+          # The software keyboard only shows when no hardware keyboard is attached.
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
+          xcrun simctl list runtimes
+          device="$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          found = []
+          for runtime, devices in json.load(sys.stdin)['devices'].items():
+              if 'iOS' not in runtime: continue
+              version = tuple(int(n) for n in runtime.split('iOS-')[-1].split('-'))
+              for d in devices:
+                  if d['name'].startswith('iPhone'):
+                      found.append((version, 'Pro' in d['name'] and 'Max' not in d['name'], d['name'], d['udid']))
+          found.sort()
+          print(found[-1][3]); print(found[-1][2], found[-1][0], file=sys.stderr)
+          ")"
+          echo "DEVICE=$device" >> "$GITHUB_ENV"
+          xcrun simctl boot "$device"
+          xcrun simctl bootstatus "$device" -b
+          xcrun simctl ui "$device" appearance dark
+
+      - name: Run the app and take screenshots
+        run: |
+          app="$(ls -d build/Build/Products/Release-iphonesimulator/*.app | head -1)"
+          bundle="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          mkdir -p shots
+          xcrun simctl install "$DEVICE" "$app"
+          xcrun simctl spawn "$DEVICE" log stream --level debug --predicate 'eventMessage CONTAINS "[sim]"' > shots/log.txt 2>&1 &
+          xcrun simctl launch "$DEVICE" "$bundle"
+          steps=""
+          # One screenshot a second, named by the clock, until the app says it has finished.
+          for i in $(seq 1 150); do
+            now="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+            xcrun simctl io "$DEVICE" screenshot --type=jpeg "shots/$now.jpg" > /dev/null 2>&1 || true
+            data="$(xcrun simctl get_app_container "$DEVICE" "$bundle" data 2>/dev/null || true)"
+            if [ -n "$data" ] && [ -f "$data/Documents/sim-steps.txt" ]; then
+              cp "$data/Documents/sim-steps.txt" shots/steps.txt
+              if grep -q finished shots/steps.txt; then break; fi
+            fi
+            sleep 0.6
+          done
+          # Half size is plenty to read, and keeps the branch small.
+          sips -Z 1320 shots/*.jpg > /dev/null
+          ls shots | wc -l
+          cat shots/steps.txt || true
+
+      - name: Keep the screenshots
+        if: always()
+        run: |
+          mkdir -p shots
+          cp build.log shots/build-tail.txt 2>/dev/null && tail -200 shots/build-tail.txt > shots/build.txt && rm shots/build-tail.txt || true
+          cd shots
+          echo "Screenshots from run ${{ github.run_id }} of commit ${{ github.sha }}." > README.md
+          git init -q -b sim-screenshots
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Screenshots from run ${{ github.run_id }}"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" sim-screenshots

@@ -10,7 +10,9 @@ export type Timings = { used: number; speed: number; thought: number };
 let loaded = false;
 let stopping = false;
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** How slowly replies are written: 1 is the usual pace, 4 takes four times as long. */
+const pace = () => (globalThis as { pocketPace?: number }).pocketPace ?? 1;
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms * pace()));
 
 const SAMPLE = `Here is a short answer with a bit of everything.
 
