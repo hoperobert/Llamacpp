@@ -206,17 +206,17 @@ export async function start() {
       const { engine: state } = app.get();
       if (model) {
         // The first model someone downloads is the one they want to talk to.
-        if (state.status === 'none' && !app.get().settings.loadedOnce) loadModel(model);
+        if (state.status === 'none' && !app.get().settings.loadedOnce) loadWhenOnScreen(model);
       } else {
         // A photo add-on arrived: reload its model so it can start looking at photos.
         const base = allModels().find((m) => visionAddon(m)?.id === modelId);
-        if (base && state.status === 'ready' && state.modelId === base.id) loadModel(base);
+        if (base && state.status === 'ready' && state.modelId === base.id) loadWhenOnScreen(base);
       }
     }
   });
 
   const preferred = findModel(settings.modelId);
-  if (preferred && downloaded[preferred.id] && settings.loadedOnce && !marker) loadModel(preferred);
+  if (preferred && downloaded[preferred.id] && settings.loadedOnce && !marker) loadWhenOnScreen(preferred);
 
   AppState.addEventListener('change', onAppState);
   AppState.addEventListener('memoryWarning', onMemoryWarning);
@@ -246,22 +246,33 @@ async function repairTitles(chatList: ChatMeta[]) {
 /** Set when iOS asked for memory back and the model was let go to oblige. */
 let reloadOnReturn: Model | null = null;
 
+/** A model waiting to be loaded once the app is on screen. */
+let loadWhenActive: Model | null = null;
+
+/**
+ * Loads a model now if the app is on screen, otherwise as soon as it is.
+ * iOS can start the app in the background (to hand over a finished download),
+ * and loading a model there would use the GPU, which iOS does not allow.
+ */
+function loadWhenOnScreen(model: Model) {
+  if (AppState.currentState === 'active') loadModel(model);
+  else loadWhenActive = model;
+}
+
 function onAppState(next: string) {
-  if (next === 'background') {
-    // iOS does not let an app use the GPU in the background. Stop cleanly and
-    // keep what was written, instead of being stopped mid-word.
-    if (app.get().busy) {
-      interrupted = 'Paused when you left the app.';
-      engine.stop();
-    }
+  if (next === 'inactive' || next === 'background') {
+    // iOS closes an app that is still using the GPU when it reaches the
+    // background, and the warning for that can arrive too late. So stop as
+    // soon as the app starts to leave the screen, and keep what was written.
+    if (app.get().busy) interrupted = 'Paused when you left the app.';
+    engine.stop();
     Speech.stop().catch(() => {});
   } else if (next === 'active') {
     resumeFailedDownloads();
-    if (reloadOnReturn) {
-      const model = reloadOnReturn;
-      reloadOnReturn = null;
-      if (app.get().engine.status === 'none') loadModel(model);
-    }
+    const model = reloadOnReturn ?? loadWhenActive;
+    reloadOnReturn = null;
+    loadWhenActive = null;
+    if (model && app.get().engine.status === 'none') loadModel(model);
   }
 }
 
@@ -422,11 +433,17 @@ function queueSideJob(chatId: string, patch: { fact?: string; title?: boolean })
  * That is why they wait until the chat is short or has been left.
  */
 function flushSideJobs() {
+  // These use the GPU too, so they wait until the app is on screen.
+  if (AppState.currentState !== 'active') return;
   const jobs = sideJobs;
   sideJobs = [];
   for (const job of jobs) {
     withEngine(async () => {
       if (!engine.isLoaded()) return;
+      if (AppState.currentState !== 'active') {
+        sideJobs.push(job);
+        return;
+      }
       const { settings } = app.get();
       if (job.title && settings.autoTitle) {
         const chat = app.get().chat.id === job.chatId ? app.get().chat : await store.chat(job.chatId);

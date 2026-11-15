@@ -5,7 +5,7 @@ import {
   Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { useHeaderHeight } from 'expo-router/react-navigation';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   app, findModel, newChat, removeChat, renameChat, send, shareChat, summariseNow, togglePin,
 } from '../lib/app';
@@ -30,7 +30,9 @@ const SUGGESTIONS: { icon: IconName; title: string; prompt: string }[] = [
 
 export default function ChatScreen() {
   const t = useTheme();
-  const headerHeight = useHeaderHeight();
+  // Worked out from the screen itself. The height the system reports for the header
+  // has been badly wrong on iOS 26, which stretched the fade below over the whole chat.
+  const headerHeight = useSafeAreaInsets().top + 54;
   const [composerHeight, setComposerHeight] = useState(72);
   const [scrolledUp, setScrolledUp] = useState(false);
   const list = useRef<FlatList<Row>>(null);
@@ -153,7 +155,7 @@ const FADE_STEPS = [0.94, 0.86, 0.72, 0.54, 0.34, 0.16];
 function TopFade({ t, height }: { t: Theme; height: number }) {
   return (
     <View pointerEvents="none" style={styles.fade}>
-      <View style={{ height: Math.max(0, height - 6), backgroundColor: t.c.bg, opacity: 0.94 }} />
+      <View style={{ height: Math.min(170, Math.max(0, height - 6)), backgroundColor: t.c.bg, opacity: 0.94 }} />
       {FADE_STEPS.map((opacity) => (
         <View key={opacity} style={{ height: 4, backgroundColor: t.c.bg, opacity }} />
       ))}
@@ -190,16 +192,20 @@ function Header() {
     );
   };
 
-  const rename = () => {
+  const canRename = hasMessages && !chat.incognito;
+  const rename = useCallback(() => {
     if (Platform.OS !== 'ios') return;
-    Alert.prompt('Rename Chat', undefined, (title) => renameChat(chat.id, title), 'plain-text', chat.title);
-  };
+    const current = app.get().chat;
+    Alert.prompt('Rename Chat', undefined, (title) => renameChat(current.id, title), 'plain-text', current.title);
+  }, []);
+  // Kept the same from one render to the next, so the header is only rebuilt when it has to be.
+  const headerTitle = useCallback(() => <TitlePill onPress={canRename ? rename : undefined} />, [canRename, rename]);
 
   return (
     <>
       <Stack.Screen
         options={{
-          headerTitle: () => <TitlePill onPress={hasMessages && !chat.incognito ? rename : undefined} />,
+          headerTitle,
           // The browser preview has no system toolbar, so it gets plain buttons instead.
           ...(Platform.OS === 'web' ? {
             headerLeft: () => <WebButton icon="line.3.horizontal" label="Chats" onPress={() => router.push('/chats')} />,

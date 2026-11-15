@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ActionSheetIOS, Animated, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { app, copyText, editMessage, regenerate, shareText, speak } from '../lib/app';
+import { app, copyText, editMessage, regenerate, send, shareText, speak } from '../lib/app';
 import { imageUri } from '../lib/images';
 import type { Message } from '../lib/storage';
 import { Icon, type IconName } from './Icon';
@@ -64,7 +64,19 @@ export const MessageRow = React.memo(function MessageRow(p: Props) {
             ? (!message.reasoning && <Dots t={t} />)
             : <Markdown source={message.content} t={t} />}
           {!!message.stopped && !streaming && (
-            <Text style={[styles.note, { color: t.c.secondary }]}>{message.stopped}</Text>
+            <View style={styles.paused}>
+              <Text style={[styles.note, { color: t.c.secondary }]}>{message.stopped}</Text>
+              {p.canRetry && (
+                <Pressable
+                  onPress={() => send('Continue')}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.continue, { backgroundColor: t.c.fill }, pressed && styles.dim]}
+                >
+                  <Text style={[styles.continueText, { color: t.c.text }]}>Continue</Text>
+                </Pressable>
+              )}
+            </View>
           )}
           {!streaming && !!message.content && <Actions {...p} />}
         </View>
@@ -175,6 +187,10 @@ const styles = StyleSheet.create({
   },
   assistant: { gap: 10 },
   note: { fontSize: 13 },
+  paused: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  continue: { borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7 },
+  continueText: { fontSize: 14, fontWeight: '600' },
+  dim: { opacity: 0.5 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 2, marginLeft: -8, marginTop: -2 },
   action: { width: 40, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   speed: { fontSize: 12, marginLeft: 8, fontVariant: ['tabular-nums'] },
