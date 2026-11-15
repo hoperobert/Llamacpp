@@ -60,9 +60,25 @@ export default function ChatScreen() {
 
   const empty = rows.length === 0;
 
+  // iOS 26 dims and blurs a list where it runs under the bars around it. The
+  // message list is drawn upside down so that it grows from the bottom, and the
+  // system then puts that effect in the wrong place: with the keyboard up it
+  // covered the whole chat. The header has its own backdrop (TopFade), so the
+  // system's is switched off. It is applied to the list that exists at the
+  // time, so it is sent again whenever a list appears or changes size (which
+  // is also when the keyboard comes and goes).
+  const [resend, setResend] = useState(false);
+  const onListLayout = useCallback(() => setResend((value) => !value), []);
+  const edgeEffects = useMemo(() => ({
+    top: 'hidden' as const, bottom: 'hidden' as const, right: 'hidden' as const,
+    // This edge never shows anything on a list that scrolls up and down. Changing it is what sends the rest again.
+    left: resend ? 'hidden' as const : 'automatic' as const,
+  }), [resend]);
+
   return (
     <View style={[styles.flex, { backgroundColor: t.c.bg }]}>
-      <Header />
+      <Stack.Screen options={{ scrollEdgeEffects: edgeEffects }} />
+      {/* The list comes first: the system setting above reaches the first list it finds from the top. */}
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         {/* The floating pieces sit inside this view so they rise with the keyboard. */}
         <View style={styles.flex}>
@@ -72,6 +88,7 @@ export default function ChatScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
+            onLayout={onListLayout}
           >
             {ready ? <Greeting t={t} /> : <Welcome t={t} />}
           </ScrollView>
@@ -80,6 +97,7 @@ export default function ChatScreen() {
             ref={list}
             data={rows}
             inverted
+            onLayout={onListLayout}
             keyExtractor={(row) => row.key}
             renderItem={renderItem}
             // Inverted, so "top" padding is the space above the message box.
@@ -111,6 +129,7 @@ export default function ChatScreen() {
         <Composer t={t} onHeight={setComposerHeight} />
         </View>
       </KeyboardAvoidingView>
+      <Header />
     </View>
   );
 }
