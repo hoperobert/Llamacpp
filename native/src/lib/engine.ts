@@ -1,7 +1,7 @@
 // Wraps llama.rn (llama.cpp built natively, running on the GPU through Metal).
 
 import { AppState } from 'react-native';
-import { BuildInfo, initLlama, type LlamaContext } from 'llama.rn';
+import { BuildInfo, initLlama, loadLlamaModelInfo, type LlamaContext } from 'llama.rn';
 import { imageUri } from './images';
 
 let context: LlamaContext | null = null;
@@ -37,6 +37,15 @@ export type Timings = {
   /** Seconds spent thinking before the answer began. 0 when the model did not think. */
   thought: number;
 };
+
+/** The details stored in a model file, without loading the model. Null if they cannot be read. */
+export async function modelDetails(uri: string): Promise<Record<string, unknown> | null> {
+  try {
+    return (await loadLlamaModelInfo(uri)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Loads a model. With a projector file, the model can also look at photos;

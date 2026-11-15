@@ -10,9 +10,10 @@ import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
 
 import { onOrOff, parseCommand, subjectOf, type Command } from './commands';
+import { bestContext, DEFAULT_KV_KB, kvKBPerToken, stepBelow, trainedContext } from './context';
 import { freeDiskMB, ramMB } from './device';
 import {
-  deleteModel, isDownloaded, modelUri, pauseDownload, restoreDownloads, resumeFailedDownloads, startDownload,
+  deleteModel, fileSizeMB, isDownloaded, modelUri, pauseDownload, restoreDownloads, resumeFailedDownloads, startDownload,
   type DownloadState,
 } from './downloads';
 import * as engine from './engine';
@@ -196,9 +197,22 @@ export async function start() {
   let settings = savedSettings;
   // A marker left behind means the last load took the app down, most likely
   // by running out of memory. Do not auto-load into that again.
-  if (marker) {
-    await store.setLoadMarker(null);
-    if (settings.nCtx > 2048) settings = { ...settings, nCtx: 2048 };
+  if (marker) await store.setLoadMarker(null);
+  // A model that closed the app, while loading or while writing with the app on
+  // screen, most likely ran out of memory. It gets a smaller context from now on.
+  const culprit = marker
+    ? { id: marker.modelId, nCtx: marker.nCtx }
+    : previous?.phase === 'active' && previous.modelId && previous.doing.includes('writing a reply')
+      ? { id: previous.modelId, nCtx: previous.nCtx ?? settings.nCtx }
+      : null;
+  if (culprit) {
+    const lower = stepBelow(culprit.nCtx);
+    settings = {
+      ...settings,
+      contextCaps: { ...settings.contextCaps, [culprit.id]: Math.min(lower, settings.contextCaps[culprit.id] ?? lower) },
+      // A size picked by hand is brought down too.
+      ...(settings.autoContext ? {} : { nCtx: Math.min(settings.nCtx, lower) }),
+    };
     store.saveSettings(settings);
   }
   app.set({ settings, memories, chatList, customModels, projects, crashed: !!marker });
@@ -359,7 +373,27 @@ const RETURN_WITHIN_MS = 30 * 60 * 1000;
 
 // ---------- models ----------
 
-export async function loadModel(model: Model, nCtx = app.get().settings.nCtx) {
+/**
+ * The context to give a model. Chosen to fit this phone unless the user has
+ * picked a size themselves.
+ */
+async function contextForModel(model: Model): Promise<number> {
+  const { settings, downloaded } = app.get();
+  if (!settings.autoContext) return settings.nCtx;
+  // A model from the catalogue has its needs written down. One added from a link says in its file.
+  const details = model.kvKB ? null : await engine.modelDetails(modelUri(model));
+  const addon = visionAddon(model);
+  return bestContext({
+    fileMB: model.sizeMB || fileSizeMB(model),
+    kvKB: model.kvKB ?? (details && kvKBPerToken(details)) ?? DEFAULT_KV_KB,
+    extraMB: addon && downloaded[addon.id] ? addon.sizeMB : 0,
+    ramMB,
+    trained: details ? trainedContext(details) : null,
+    cap: settings.contextCaps[model.id],
+  });
+}
+
+export async function loadModel(model: Model) {
   if (AppState.currentState !== 'active') {
     loadWhenActive = model;
     return;
@@ -367,7 +401,8 @@ export async function loadModel(model: Model, nCtx = app.get().settings.nCtx) {
   app.set({ engine: { status: 'loading', modelId: model.id, fraction: 0, error: null, gpu: false, vision: false } });
   await withEngine(async () => {
     doing('loading a model', true);
-    note({ model: null });
+    note({ model: null, modelId: null });
+    const nCtx = await contextForModel(model);
     await store.setLoadMarker({ modelId: model.id, nCtx });
     await activateKeepAwakeAsync('load').catch(() => {});
     try {
@@ -381,8 +416,9 @@ export async function loadModel(model: Model, nCtx = app.get().settings.nCtx) {
         app.set((s) => (s.engine.status === 'loading' ? { engine: { ...s.engine, fraction } } : {}));
       }, projector);
       app.set({ engine: { status: 'ready', modelId: model.id, fraction: 1, error: null, gpu, vision }, crashed: false });
-      note({ model: model.name });
-      updateSettings({ modelId: model.id, loadedOnce: true });
+      note({ model: model.name, modelId: model.id, nCtx });
+      // The size in use is kept in the settings, where the rest of the app reads it.
+      updateSettings({ modelId: model.id, loadedOnce: true, nCtx });
       haptic('success');
     } catch (e) {
       app.set({
@@ -705,7 +741,9 @@ async function lookUp(text: string, chat: Chat): Promise<{ context?: string; sou
   const passages = await lookup(question).catch(() => []);
   app.set({ status: '' });
   if (!passages.length) return {};
-  return { context: referenceText(passages), sources: [...new Set(passages.map((p) => p.title))] };
+  // A model with a small context is given less to read, so there is room left for the chat.
+  const room = Math.min(3200, Math.round(app.get().settings.nCtx * 0.8));
+  return { context: referenceText(passages, room), sources: [...new Set(passages.map((p) => p.title))] };
 }
 
 /** Lets the user pick a photo, or take one, to send with their next message. */
@@ -1083,12 +1121,13 @@ export function speak(message: Message) {
 // ---------- settings, memories, data ----------
 
 export function changeSettings(patch: Partial<Settings>) {
-  const before = app.get().settings.nCtx;
+  const before = app.get().settings;
   const next = updateSettings(patch);
   // Changing the context size only takes effect on a reload.
   const { engine: state } = app.get();
   const model = findModel(state.modelId);
-  if (next.nCtx !== before && state.status === 'ready' && model) loadModel(model, next.nCtx);
+  const changed = next.nCtx !== before.nCtx || next.autoContext !== before.autoContext;
+  if (changed && state.status === 'ready' && model) loadModel(model);
 }
 
 export function remember(text: string): boolean {

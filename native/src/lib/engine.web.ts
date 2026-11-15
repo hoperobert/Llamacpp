@@ -48,6 +48,7 @@ export async function loadModel(
   return { gpu: false, vision: !!projectorUri };
 }
 
+export const modelDetails = async (_uri: string): Promise<Record<string, unknown> | null> => null;
 export async function unloadModel() { loaded = false; }
 export const isLoaded = () => loaded;
 export function stop() { stopping = true; }

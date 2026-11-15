@@ -60,9 +60,10 @@ export default function SettingsScreen() {
 
         <Section t={t} title="Context">
           <ChoiceRow
-            t={t} title="Size" value={settings.nCtx}
-            onChange={(nCtx) => changeSettings({ nCtx })}
-            options={[{ label: '2K', value: 2048 }, { label: '4K', value: 4096 }, { label: '8K', value: 8192 }, { label: '16K', value: 16384 }]}
+            // Auto picks a size for each model that fits this iPhone.
+            t={t} title="Size" value={settings.autoContext ? 0 : settings.nCtx}
+            onChange={(size) => changeSettings(size ? { autoContext: false, nCtx: size } : { autoContext: true })}
+            options={[{ label: 'Auto', value: 0 }, { label: '2K', value: 2048 }, { label: '4K', value: 4096 }, { label: '8K', value: 8192 }]}
           />
           <SwitchRow t={t} title="Summarise long chats" value={settings.autoSummary} onChange={(autoSummary) => changeSettings({ autoSummary })} />
           <SwitchRow t={t} title="Name chats" value={settings.autoTitle} onChange={(autoTitle) => changeSettings({ autoTitle })} />
@@ -96,6 +97,7 @@ export default function SettingsScreen() {
             `llama.cpp ${engineVersion}`,
             ramMB ? `${Math.round(ramMB / 1024)} GB` : '',
             engine.status === 'ready' ? (engine.gpu ? 'GPU' : 'CPU') : '',
+            engine.status === 'ready' ? `${(settings.nCtx / 1024).toFixed(settings.nCtx % 1024 ? 1 : 0)}K context` : '',
           ].filter(Boolean).join(' · ')}
         </Text>
         {!!lastClose && <Text style={[styles.about, styles.lastClose, { color: t.c.tertiary }]}>{lastClose}</Text>}

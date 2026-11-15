@@ -12,6 +12,11 @@ export type Model = {
   url: string;
   group: Group;
   /** The extra file that lets this model look at photos, when one exists. */
+  /**
+   * Memory the context takes per token, in KB. Worked out from the details in
+   * the model's file (see context.ts) and used to choose a context that fits.
+   */
+  kvKB?: number;
   vision?: { file: string; url: string; sizeMB: number };
 };
 
@@ -30,6 +35,7 @@ export const MODELS: Model[] = [
     name: 'Qwen3.5 0.8B',
     note: 'Fastest',
     sizeMB: 563,
+    kvKB: 48,
     file: 'Qwen3.5-0.8B-Q4_0.gguf',
     url: 'https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf',
     group: 'fast',
@@ -39,6 +45,7 @@ export const MODELS: Model[] = [
     name: 'LFM3 1.7B',
     note: 'Built for phones',
     sizeMB: 1100,
+    kvKB: 22,
     file: 'LFM3-1.7B-Q4_K_M.gguf',
     url: 'https://huggingface.co/LiquidAI/LFM3-1.7B-GGUF/resolve/main/LFM3-1.7B-Q4_K_M.gguf',
     group: 'fast',
@@ -48,6 +55,7 @@ export const MODELS: Model[] = [
     name: 'Qwen3.5 2B',
     note: 'Balanced',
     sizeMB: 1281,
+    kvKB: 48,
     file: 'Qwen3.5-2B-Q4_K_M.gguf',
     url: 'https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf',
     group: 'fast',
@@ -62,6 +70,7 @@ export const MODELS: Model[] = [
     name: 'Qwen3.8 2B Distilled',
     note: 'Always thinks first',
     sizeMB: 1312,
+    kvKB: 50,
     file: 'Qwen3.8-2B-Q4_K_M.gguf',
     url: 'https://huggingface.co/empero-ai/Qwen3.8-2B-Distill-GGUF/resolve/main/Qwen3.8-2B-Q4_K_M.gguf',
     group: 'fast',
@@ -71,6 +80,7 @@ export const MODELS: Model[] = [
     name: 'Spark-X2.6 1.7B',
     note: 'New, strong for its size',
     sizeMB: 1769,
+    kvKB: 56,
     file: 'Spark-X2.6-1.7B-Q4_K_M.gguf',
     url: 'https://huggingface.co/XHToken/Spark-X2.6-1.7B-GGUF/resolve/main/Spark-X2.6-1.7B-Q4_K_M.gguf',
     group: 'fast',
@@ -80,6 +90,7 @@ export const MODELS: Model[] = [
     name: 'Gemma 4 E2B',
     note: 'By Google',
     sizeMB: 2841,
+    kvKB: 70,
     file: 'gemma-4-E2B-it-Q4_0.gguf',
     url: 'https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_0.gguf',
     group: 'smart',
@@ -94,6 +105,7 @@ export const MODELS: Model[] = [
     name: 'Qwen3.5 4B',
     note: 'Best all-rounder',
     sizeMB: 3032,
+    kvKB: 128,
     file: 'Qwen3.5-4B-Q4_K_M.gguf',
     url: 'https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf',
     group: 'smart',
@@ -108,6 +120,7 @@ export const MODELS: Model[] = [
     name: 'Qwen3.8 4B Distilled',
     note: 'Always thinks first',
     sizeMB: 2783,
+    kvKB: 132,
     file: 'Qwen3.8-4B-Q4_K_M.gguf',
     url: 'https://huggingface.co/empero-ai/Qwen3.8-4B-Distill-GGUF/resolve/main/Qwen3.8-4B-Q4_K_M.gguf',
     group: 'smart',
@@ -117,6 +130,7 @@ export const MODELS: Model[] = [
     name: 'Spark-X2.6 4B',
     note: 'New, near larger models',
     sizeMB: 3543,
+    kvKB: 144,
     file: 'Spark-X2.6-4B-Q4_K_M.gguf',
     url: 'https://huggingface.co/XHToken/Spark-X2.6-4B-GGUF/resolve/main/Spark-X2.6-4B-Q4_K_M.gguf',
     group: 'smart',
@@ -126,6 +140,7 @@ export const MODELS: Model[] = [
     name: 'Nemotron Dory 1.0 4B',
     note: 'Research model, slow',
     sizeMB: 3673,
+    kvKB: 288,
     file: 'NVIDIA-Nemotron-Labs-Dory1.0-4B-Q5_K_M.gguf',
     url: 'https://huggingface.co/nvidia/NVIDIA-Nemotron-Labs-Dory1.0-4B-GGUF/resolve/main/NVIDIA-Nemotron-Labs-Dory1.0-4B-Q5_K_M.gguf',
     group: 'smart',
@@ -135,6 +150,7 @@ export const MODELS: Model[] = [
     name: 'Gemma 4 E4B',
     note: 'By Google',
     sizeMB: 4591,
+    kvKB: 168,
     file: 'gemma-4-E4B-it-Q4_0.gguf',
     url: 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_0.gguf',
     group: 'large',
@@ -149,6 +165,7 @@ export const MODELS: Model[] = [
     name: 'Qwen3.5 9B',
     note: 'Very capable, slow',
     sizeMB: 5379,
+    kvKB: 128,
     file: 'Qwen3.5-9B-Q4_0.gguf',
     url: 'https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_0.gguf',
     group: 'large',
@@ -158,6 +175,7 @@ export const MODELS: Model[] = [
     name: 'Ornith 1.5 9B',
     note: 'Strong at code',
     sizeMB: 5780,
+    kvKB: 132,
     file: 'Ornith-1.5-9B-Q4_K_M.gguf',
     url: 'https://huggingface.co/ornith-ai/Ornith-1.5-9B-GGUF/resolve/main/Ornith-1.5-9B-Q4_K_M.gguf',
     group: 'large',
@@ -167,6 +185,7 @@ export const MODELS: Model[] = [
     name: 'LFM3 1.7B Unfiltered',
     note: 'Fast',
     sizeMB: 1132,
+    kvKB: 22,
     file: 'LFM3-1.7B-Uncensored-AD-Q4_K_M.gguf',
     url: 'https://huggingface.co/AtomicChat/LFM3-1.7B-Uncensored-GGUF/resolve/main/LFM3-1.7B-Uncensored-AD-Q4_K_M.gguf',
     group: 'unfiltered',
@@ -176,6 +195,7 @@ export const MODELS: Model[] = [
     name: 'Qwen3.5 4B Unfiltered',
     note: 'Most popular',
     sizeMB: 2707,
+    kvKB: 128,
     file: 'Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf',
     url: 'https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive/resolve/main/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf',
     group: 'unfiltered',
@@ -192,6 +212,7 @@ export const MODELS: Model[] = [
     name: 'Spark-X2.6 4B Unfiltered',
     note: 'Newest',
     sizeMB: 2600,
+    kvKB: 144,
     file: 'Spark-X2.6-4B-abliterated-Q4_K_M.gguf',
     url: 'https://huggingface.co/FrostWolfAI/Spark-X2.6-4B-abliterated-GGUF/resolve/main/Spark-X2.6-4B-abliterated-Q4_K_M.gguf',
     group: 'unfiltered',

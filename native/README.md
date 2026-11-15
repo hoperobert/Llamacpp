@@ -117,6 +117,23 @@ quiet: a paper-like palette with a blue accent.
   they wait until the chat is left, so the next reply does not have to re-read
   the whole conversation.
 
+## Context size
+
+How much a model can keep in mind at once is chosen for each model, to fit the
+phone. A loaded model takes memory for the model itself, for its context, and
+for working space. The context is the part that can be chosen: its cost per
+token is worked out from the details in the model's file (layers, attention
+heads and their width), and the largest size is picked that keeps the context
+within 7% of the phone's memory and everything together within 60%.
+
+On an 8 GB iPhone that gives the 2B models 8K, most 4B models 4K, Spark-X2.6
+4B 3K, and Nemotron Dory and Gemma 4 E4B 2K. Dory's context costs more than
+twice as much per token as the other 4B models.
+
+If a model closes the app while loading, or while writing a reply with the app
+on screen, it is given the next size down from then on. A size can still be
+picked by hand in Settings.
+
 ## Preview in a browser
 
 ```sh
@@ -157,6 +174,7 @@ patch does.
 | `src/lib/app.ts` | The app's state and everything it can do. |
 | `src/lib/engine.ts` | Loading models and generating text through llama.rn. |
 | `src/lib/downloads.ts` | Background model downloads that survive the app closing. |
+| `src/lib/context.ts` | Choosing a context size that fits the phone. |
 | `src/lib/commands.ts` | The slash commands and how each is written out for the model. |
 | `src/lib/logic.ts` | Prompt building, context compaction, titles and memories. |
 | `src/lib/models.ts` | The model catalogue and how well each suits a device. |

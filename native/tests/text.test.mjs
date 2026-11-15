@@ -95,3 +95,63 @@ assert.equal(onOrOff('ON', false), true);
 assert.equal(onOrOff('off', true), false);
 assert.equal(onOrOff('maybe', true), null);
 console.log('commands: all checks passed');
+
+// ---------- context size ----------
+const { bestContext, CONTEXT_STEPS, kvKBPerToken, stepBelow, trainedContext } = await import('../src/lib/context.ts');
+const { MODELS } = await import('../src/lib/models.ts');
+
+// Details as they are stored in real model files. The engine hands them over as text.
+const qwen4b = {
+  'general.architecture': 'qwen35', 'qwen35.block_count': '32', 'qwen35.context_length': '262144',
+  'qwen35.embedding_length': '2560', 'qwen35.attention.head_count': '16', 'qwen35.attention.head_count_kv': '4',
+  'qwen35.attention.key_length': '256', 'qwen35.attention.value_length': '256',
+};
+assert.equal(kvKBPerToken(qwen4b), 128);
+assert.equal(trainedContext(qwen4b), 262144);
+// A model whose layers do not all pay attention lists its heads layer by layer.
+const lfm = {
+  'general.architecture': 'lfm3', 'lfm3.block_count': 24, 'lfm3.embedding_length': 2048, 'lfm3.attention.head_count': 16,
+  'lfm3.attention.head_count_kv': '[0, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0]',
+  'lfm3.attention.key_length': 128, 'lfm3.attention.value_length': 128,
+};
+assert.equal(kvKBPerToken(lfm), 22);
+assert.equal(kvKBPerToken({ ...lfm, 'lfm3.attention.head_count_kv': [0, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0, 4, 0] }), 22);
+// With no key length given, it is the width shared between the heads.
+assert.equal(kvKBPerToken({ 'general.architecture': 'llama', 'llama.block_count': 32, 'llama.embedding_length': 4096, 'llama.attention.head_count': 32, 'llama.attention.head_count_kv': 8 }), 128);
+assert.equal(kvKBPerToken({}), null);
+assert.equal(kvKBPerToken({ 'general.architecture': 'x' }), null);
+
+assert.ok(MODELS.every((m) => m.kvKB > 0), 'every model in the catalogue says what its context costs');
+const on = (id, ramMB, extra = false) => {
+  const m = MODELS.find((model) => model.id === id);
+  return bestContext({ fileMB: m.sizeMB, kvKB: m.kvKB, extraMB: extra ? m.vision.sizeMB : 0, ramMB });
+};
+// An 8 GB iPhone: small models get plenty, the 4B ones what they had, the heaviest less.
+assert.equal(on('qwen35-2b', 7600), 8192);
+assert.equal(on('qwen35-4b', 7600), 4096);
+assert.equal(on('qwen35-4b', 7600, true), 4096, 'still fits with what lets it see photos');
+assert.equal(on('spark-x26-4b', 7600), 3072);
+assert.equal(on('dory10-4b', 7600), 2048, 'its context costs more than twice as much per token');
+assert.equal(on('gemma4-e4b', 7600), 2048);
+// The same model gets more on a bigger phone and less on a smaller one.
+assert.equal(on('qwen35-4b', 5700), 2048);
+assert.equal(on('qwen35-4b', 11400), 6144);
+assert.equal(on('qwen35-4b', 15200), 8192);
+for (const model of MODELS) {
+  for (const ram of [3800, 5700, 7600, 11400, 15200]) {
+    const size = on(model.id, ram);
+    assert.ok(CONTEXT_STEPS.includes(size));
+    assert.ok(size === 2048 || (size * model.kvKB) / 1024 <= ram * 0.07 + 1, `${model.id} on ${ram} MB keeps its context within bounds`);
+    assert.ok(size <= on(model.id, ram * 2), 'more memory never means less context');
+  }
+}
+// Limits: what the model was made for, and what it was cut to after closing the app.
+assert.equal(bestContext({ fileMB: 500, kvKB: 20, ramMB: 15200, trained: 4096 }), 4096);
+assert.equal(bestContext({ fileMB: 500, kvKB: 20, ramMB: 15200, cap: 3072 }), 3072);
+assert.equal(bestContext({ fileMB: 500, kvKB: 20, ramMB: null }), 8192);
+assert.equal(bestContext({ fileMB: 3000, kvKB: 128, ramMB: null }), 2048, 'an unknown phone is treated as a small one');
+assert.equal(stepBelow(4096), 3072);
+assert.equal(stepBelow(8192), 6144);
+assert.equal(stepBelow(2048), 2048);
+assert.equal(stepBelow(5000), 4096);
+console.log('context: all checks passed');
