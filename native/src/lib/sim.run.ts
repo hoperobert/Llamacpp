@@ -20,6 +20,12 @@ import { app, changeSettings, download, loadModel, newChat, runCommand, send, st
 import { COMMANDS } from './commands';
 import { engineVersion } from './engine';
 import { MODELS } from './models';
+import { DEFAULT_FLAGS, type SimFlags } from './simFlags';
+import { createStore } from './store';
+
+/** How the chat screen is built right now. The script changes it to try alternatives. */
+const flags = createStore<SimFlags>(DEFAULT_FLAGS);
+export const useSimFlags = (): SimFlags => flags.use((f) => f);
 
 const REAL = engineVersion !== 'preview';
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,6 +77,49 @@ async function leave(label: string) {
 
 const command = (name: string, arg = '') => runCommand(COMMANDS.find((c) => c.name === name)!, arg);
 
+/** Sends a message and waits for its reply to be finished. */
+async function ask(text: string, limit = 120000) {
+  const before = app.get().chat.messages.length;
+  send(text);
+  await until(() => app.get().busy || app.get().chat.messages.length > before + 1, 15000);
+  await until(() => !app.get().busy, limit);
+}
+
+/**
+ * Builds the chat screen in different ways, one after another, and does the
+ * thing that turns the chat grey each time: a reply long enough to run under
+ * the header while the keyboard is up. A line beginning DUMP asks for the
+ * system's own list of what is on screen, which shows what the grey is.
+ */
+async function variants() {
+  const tries: [string, Partial<SimFlags>][] = [
+    ['as shipped', {}],
+    ['system edge effects hidden', { edges: 'hidden' }],
+    ['header not transparent', { transparentHeader: false }],
+    ['list not upside down', { inverted: false }],
+    ['no glass', { glass: false }],
+    ['edge effects hidden and list not upside down', { edges: 'hidden', inverted: false }],
+  ];
+  for (const [name, change] of tries) {
+    flags.set({ ...DEFAULT_FLAGS, ...change });
+    newChat();
+    await wait(1500);
+    keyboard(true);
+    await wait(1200);
+    step(`TRY ${name}: keyboard up, empty`);
+    await ask('Explain how vaccines work in simple terms');
+    await wait(800);
+    step(`TRY ${name}: reply done, keyboard up`);
+    step(`DUMP ${name}`);
+    await wait(9000);
+    keyboard(false);
+    await wait(1800);
+    step(`TRY ${name}: keyboard down`);
+    await wait(1500);
+  }
+  flags.set(DEFAULT_FLAGS);
+}
+
 async function scenario() {
   await until(() => app.get().hydrated);
   step(`started with the ${REAL ? 'real engine' : 'stand-in engine'}. ${app.get().lastClose || 'first launch'}. ${state()}`);
@@ -115,21 +164,30 @@ async function scenario() {
   await wait(2000);
 
   changeSettings({ thinking: true });
-  send('Explain how vaccines work in simple terms');
+  const first = ask('Explain how vaccines work in simple terms');
   step('sent first message');
   await wait(1200);
   keyboard(true);
   step('keyboard up while thinking');
   await wait(4000);
   step('keyboard still up, reply being written');
-  await until(() => !app.get().busy, 120000);
+  await first;
   step(`first reply done, keyboard up ${state()}`);
+  step('DUMP first reply done, keyboard up');
+  await wait(9000);
   await wait(2500);
   keyboard(false);
   step('keyboard down after first reply');
   await wait(2500);
 
-  send('And how long do they last?');
+  if (!REAL) {
+    // With the stand-in there is no engine to test, only how the screen is built.
+    await variants();
+    step(`finished ${state()}`);
+    return;
+  }
+
+  const second = ask('And how long do they last?');
   step('sent second message');
   for (let i = 1; i <= 3; i++) {
     await wait(900);
@@ -142,7 +200,7 @@ async function scenario() {
   await wait(900);
   keyboard(true);
   step('keyboard up for the rest of the second reply');
-  await until(() => !app.get().busy, 120000);
+  await second;
   step(`second reply done, keyboard up ${state()}`);
   await wait(2000);
   keyboard(false);
@@ -150,7 +208,8 @@ async function scenario() {
 
   // ---------- stopping a reply ----------
   send('Write a long story about a lighthouse keeper, at least 400 words.');
-  await wait(2500);
+  await until(() => app.get().busy, 15000);
+  await wait(6000);
   stop();
   await until(() => !app.get().busy, 30000);
   step(`stopped a reply by hand ${state()}`);
@@ -159,12 +218,12 @@ async function scenario() {
   // ---------- leaving the app and coming back ----------
   await leave('idle');
   send('Write a long poem about the sea, at least 300 words.');
-  await wait(2500);
+  await until(() => app.get().busy, 15000);
+  await wait(8000);
   await leave('in the middle of a reply');
   await until(() => !app.get().busy, 30000);
   step(`after leaving mid-reply ${state()}`);
-  send('Continue');
-  await until(() => !app.get().busy, 120000);
+  await ask('Continue');
   step(`continued ${state()}`);
   await wait(1500);
 
@@ -175,9 +234,7 @@ async function scenario() {
   command('goal', 'Plan a weekend in Rome');
   command('context');
   await wait(1500);
-  send('/plan a weekend in Rome');
-  await until(() => app.get().busy, 5000);
-  await until(() => !app.get().busy, 120000);
+  await ask('/plan a weekend in Rome');
   step(`planned ${state()}`);
   app.set({ draft: '/' });
   keyboard(true);
@@ -193,9 +250,7 @@ async function scenario() {
   await leave('while a model is loading');
   await until(() => app.get().engine.status === 'ready' || !!app.get().engine.error, 180000);
   step(`after leaving during a load ${state()}`);
-  send('Say hello in five words.');
-  await until(() => app.get().busy, 5000);
-  await until(() => !app.get().busy, 60000);
+  await ask('Say hello in five words.');
   step(`replied after the reload ${state()}`);
 
   // ---------- the other screens ----------
@@ -206,6 +261,9 @@ async function scenario() {
     router.back();
     await wait(1200);
   }
+  keyboard(false);
+  await wait(1000);
+  await variants();
   step(`finished ${state()}`);
 }
 

@@ -4,6 +4,7 @@
 import React from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { GlassView, isGlassEffectAPIAvailable, isLiquidGlassAvailable } from 'expo-glass-effect';
+import { useSimFlags } from '../lib/sim';
 import type { Palette } from './theme';
 
 function available(): boolean {
@@ -23,7 +24,9 @@ export function Glass({ c, style, interactive, children }: {
   interactive?: boolean;
   children?: React.ReactNode;
 }) {
-  if (hasGlass) {
+  // Always true, except in a simulator test that is trying the app without glass.
+  const { glass } = useSimFlags();
+  if (hasGlass && glass) {
     return (
       <GlassView
         style={style}

@@ -21,6 +21,7 @@ import { ModelRow } from '../ui/ModelRow';
 import { Toast } from '../ui/Toast';
 import { useKeyboardInset } from '../ui/keyboard';
 import { serif, useTheme, type Theme } from '../ui/theme';
+import { useSimFlags } from '../lib/sim';
 
 const SUGGESTIONS: { icon: IconName; title: string; prompt: string }[] = [
   { icon: 'graduationcap', title: 'Explain', prompt: 'Explain how vaccines work in simple terms' },
@@ -60,18 +61,28 @@ export default function ChatScreen() {
   ), [t]);
 
   const empty = rows.length === 0;
+  const upright = useMemo(() => [...rows].reverse(), [rows]);
   const showJump = scrolledUp && !empty;
   const keyboardInset = useKeyboardInset();
+  // Always the defaults, except in a simulator test that is trying alternatives.
+  const flags = useSimFlags();
+  const top = flags.transparentHeader ? headerHeight : 0;
 
   return (
     <View style={[styles.flex, { backgroundColor: t.c.bg }]}>
+      <Stack.Screen
+        options={{
+          headerTransparent: flags.transparentHeader,
+          scrollEdgeEffects: flags.edges === 'hidden' ? HIDDEN_EDGES : undefined,
+        }}
+      />
       {/* Everything in here rises with the keyboard. See useKeyboardInset for why this is done by hand. */}
       <Animated.View style={[styles.flex, { paddingBottom: keyboardInset }]}>
         {/* The floating pieces are placed against this inner view, which ends where the keyboard begins. */}
         <View style={styles.flex}>
         {!hydrated ? null : empty ? (
           <ScrollView
-            contentContainerStyle={[styles.emptyBody, { paddingTop: headerHeight, paddingBottom: composerHeight + 8 }]}
+            contentContainerStyle={[styles.emptyBody, { paddingTop: top, paddingBottom: composerHeight + 8 }]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
@@ -81,12 +92,14 @@ export default function ChatScreen() {
         ) : (
           <FlatList
             ref={list}
-            data={rows}
-            inverted
+            data={flags.inverted ? rows : upright}
+            inverted={flags.inverted}
             keyExtractor={(row) => row.key}
             renderItem={renderItem}
             // Inverted, so "top" padding is the space above the message box.
-            contentContainerStyle={{ paddingTop: composerHeight + 6, paddingBottom: headerHeight + 8 }}
+            contentContainerStyle={flags.inverted
+              ? { paddingTop: composerHeight + 6, paddingBottom: top + 8 }
+              : { paddingTop: top + 8, paddingBottom: composerHeight + 6 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             onScroll={(e) => setScrolledUp(e.nativeEvent.contentOffset.y > 240)}
@@ -151,6 +164,8 @@ function buildRows(
 }
 
 // ---------- header ----------
+
+const HIDDEN_EDGES = { top: 'hidden', bottom: 'hidden', left: 'hidden', right: 'hidden' } as const;
 
 const FADE_STEPS = [0.94, 0.86, 0.72, 0.54, 0.34, 0.16];
 const FADE_STEP = 4;

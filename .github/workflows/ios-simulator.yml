@@ -142,13 +142,32 @@ jobs:
           xcrun simctl spawn "$DEVICE" log stream --level info --predicate "process == \"$process\"" > shots/log-full.txt 2>&1 &
           xcrun simctl launch "$DEVICE" "$bundle"
           left=0
+          dumped=0
+          # Lets the debugger look inside the app when it asks to be described.
+          sudo DevToolsSecurity -enable > /dev/null 2>&1 || true
           # One screenshot a second, named by the clock, until the app says it has finished.
-          for i in $(seq 1 420); do
+          for i in $(seq 1 700); do
             now="$(python3 -c 'import time; print(int(time.time() * 1000))')"
             xcrun simctl io "$DEVICE" screenshot --type=jpeg "shots/$now.jpg" > /dev/null 2>&1 || true
             if [ -f "$data/Documents/sim-steps.txt" ]; then
               cp "$data/Documents/sim-steps.txt" shots/steps.txt
               if grep -q " finished " shots/steps.txt; then break; fi
+              # The app asks for the system's own list of what is on screen: every view,
+              # where it is and how see-through. It is the way to tell what a layer over the chat is.
+              wanted="$(grep -c " DUMP " shots/steps.txt || true)"
+              if [ "$wanted" -gt "$dumped" ]; then
+                dumped="$wanted"
+                pid="$(pgrep -x "$process" | head -1)"
+                echo "$now describing the screen ($wanted), process $pid" >> shots/outside.txt
+                ( lldb --batch -p "$pid" \
+                    -o 'expr -l objc -- (BOOL)[[[[[UIApplication sharedApplication] windows] firstObject] recursiveDescription] writeToFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/hierarchy.txt"] atomically:YES encoding:4 error:nil]' \
+                    -o 'detach' > "shots/lldb-$wanted.txt" 2>&1 ) &
+                debugger=$!
+                for wait in $(seq 1 40); do kill -0 "$debugger" 2>/dev/null || break; sleep 1; done
+                kill -9 "$debugger" 2>/dev/null || true
+                cp "$data/Documents/hierarchy.txt" "shots/hierarchy-$wanted.txt" 2>/dev/null || true
+                rm -f "$data/Documents/hierarchy.txt"
+              fi
               # The app asks to be sent to the background and brought back.
               asked="$(grep -c " LEAVE " shots/steps.txt || true)"
               if [ "$asked" -gt "$left" ]; then
