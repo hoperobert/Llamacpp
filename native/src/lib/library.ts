@@ -244,8 +244,12 @@ export async function restoreLibrary(onChange: Listener, downloaded: (source: So
 
 export const libraryReady = () => searchable.size > 0;
 
-/** Finds the passages in the library most likely to answer a question. */
-export async function lookup(question: string, limit = 3): Promise<Passage[]> {
+/**
+ * Finds the passages in the library most likely to answer a question.
+ * `asking` is false for a remark or a request to write something, which is only
+ * matched against the titles of articles.
+ */
+export async function lookup(question: string, limit = 3, asking = true): Promise<Passage[]> {
   const found: Passage[] = [];
   // Your own files are searched first, so that between equal finds theirs win.
   for (const name of [...searchable].sort((x, y) => Number(y === FILES_DB) - Number(x === FILES_DB))) {
@@ -253,7 +257,7 @@ export async function lookup(question: string, limit = 3): Promise<Passage[]> {
       const db = await open(name);
       const query: Query = (sql, params) => db.getAllAsync(sql, params);
       const entriesOnly = SOURCES.some((source) => dbName(source) === name && source.entriesOnly);
-      found.push(...(await retrieve(query, question, limit, { entriesOnly })));
+      found.push(...(await retrieve(query, question, limit, { entriesOnly, asking })));
     } catch {
       // A source that cannot be read is skipped.
     }

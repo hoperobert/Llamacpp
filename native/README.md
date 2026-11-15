@@ -74,9 +74,11 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   look at them (Qwen3.5 2B and 4B, Qwen3.5 4B Unfiltered, Gemma 4 E2B and
   E4B), marked with a picture in the model list. What such a model
   needs for it is downloaded along with the model.
-- **Look up** answers from an offline library instead of the web. The
-  passages that fit a question are found on the phone and handed to the model
-  with it; their titles show under your message. The library holds text files
+- **Look up** answers from an offline library instead of the web. When a
+  question is about something the library has, the passages that fit are found
+  on the phone and handed to the model with it, each headed by its source and
+  title; their titles show under your message. Remarks and requests ("make
+  that shorter") are not looked up, and nothing is handed over twice. The library holds text files
   of your own and any of these downloads:
 
   | Source | Holds | Download | On the phone |
@@ -125,6 +127,9 @@ whole layout, and when the screen was also being redrawn (a reply being
 written) a strip of the fade behind the header was left stretched over the
 chat, dimming it. Here one number is animated and the layout follows it, and
 the fade has a fixed height that nothing inside it can grow past.
+
+That did not stop it, so on iOS 26 the fade is not drawn at all; the system
+softens what scrolls under the header there by itself.
 
 ## Context size
 

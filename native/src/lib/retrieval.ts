@@ -13,6 +13,8 @@ export type Passage = {
   pos: number;
   /** How good a find it is, so finds from several sources can be put in order. */
   score?: number;
+  /** For an article the message names: how many words of the message its title is. */
+  words?: number;
 };
 
 export type Query = <T>(sql: string, params: (string | number)[]) => Promise<T[]>;
@@ -67,7 +69,8 @@ const STOP = new Set((
 // Accents are dropped, as the index drops them: "Pokémon" is found by "pokemon".
 const wordsOf = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 
-const ENDINGS = ['s', 'es', 'ing', 'ed', 'd'];
+// Plurals only. Matching "tired" to "Tire" or "poisoning" to "Poison" found articles nobody asked about.
+const ENDINGS = ['s', 'es'];
 
 /** True when two words are the same give or take an ending: "vaccines" and "vaccine", not "capital" and "capitalism". */
 function sameWord(a: string, b: string): boolean {
@@ -155,6 +158,9 @@ export function best(found: Passage[], limit = 3): Passage[] {
   return kept;
 }
 
+/** True for a page that is only a list of links to other pages ("Index of biology articles"). */
+const onlyLinks = (passage: Passage) => /^(?:index|outline) of\b/i.test(passage.title);
+
 const RANK = `bm25(passages, 8.0, 1.0) * (CASE WHEN pos = 0 THEN 1.5 ELSE 1 END)`;
 const COLUMNS = `title, body, source, pos`;
 
@@ -167,9 +173,15 @@ const COLUMNS = `title, body, source, pos`;
  */
 export async function retrieve(
   query: Query, question: string, limit = 3,
-  // A dictionary has an entry for every word of a question, so it is only asked about what the question is surely about.
-  { entriesOnly = false }: { entriesOnly?: boolean } = {},
+  options: {
+    /** For a dictionary, which has an entry for every word: only answer when asked what a word means. */
+    entriesOnly?: boolean;
+    /** False for a remark or a request to write something. Then only articles the message names are looked for. */
+    asking?: boolean;
+  } = {},
 ): Promise<Passage[]> {
+  const { entriesOnly = false, asking = true } = options;
+  if (entriesOnly && !aboutAWord(question)) return [];
   const wanted = terms(question);
   if (!wanted.length) return [];
   const chosen: Passage[] = [];
@@ -181,7 +193,7 @@ export async function retrieve(
       const row = { ...found, score: found.score ?? worth - i };
       const key = `${row.source}/${row.title}#${row.pos}`;
       const count = perTitle.get(row.title) ?? 0;
-      if (taken.has(key) || count >= 2 || chosen.length >= limit || listsMeanings(row)) continue;
+      if (taken.has(key) || count >= 2 || chosen.length >= limit || listsMeanings(row) || onlyLinks(row)) continue;
       taken.add(key);
       perTitle.set(row.title, count + 1);
       chosen.push(row);
@@ -222,7 +234,7 @@ export async function retrieve(
         // In a longer question a meaning has to fit the rest of it: "capital of Australia" is not about money.
         if (wanted.length > 1 && !named && speaksTo < 2) continue;
         guess.forEach((w) => covered.add(w));
-        subjects.push({ passage, score: STRONG + (speaksTo + named * 3) * 10 + guess.length, meaning: true });
+        subjects.push({ passage: { ...passage, words: guess.length }, score: STRONG + (speaksTo + named * 3) * 10 + guess.length, meaning: true });
       }
       continue;
     }
@@ -233,7 +245,7 @@ export async function retrieve(
     const speaksTo = coverage(hit, wanted);
     // A phrase, or an article that speaks to the whole question, is surely the subject. One word of several may not be.
     const sure = guess.length > 1 || speaksTo >= wanted.length;
-    subjects.push({ passage: hit, score: (sure ? STRONG : WEAK) + speaksTo * 10 + guess.length, sure });
+    subjects.push({ passage: { ...hit, words: guess.length }, score: (sure ? STRONG : WEAK) + speaksTo * 10 + guess.length, sure });
   }
   // The best subject always counts. A second one has to be a sure one.
   subjects.sort((a, b) => b.score - a.score);
@@ -255,38 +267,75 @@ export async function retrieve(
       add(deeper.filter((row) => row.title === subject.passage.title).slice(0, 1), FURTHER);
     }
   }
-  const found = chosen.some((p) => (p.score ?? 0) >= STRONG);
 
-  // 2. Passages that hold every word of the question.
-  if (chosen.length < limit && wanted.length > 1) {
+  // 2. For a question, passages that hold every word of it. Passages that hold
+  // only some of the words used to be next; they were rarely about the question,
+  // and searching for them was the slow part.
+  if (asking && chosen.length < limit && wanted.length > 1) {
     add(await query<Passage>(
       `SELECT ${COLUMNS} FROM passages WHERE passages MATCH ? ORDER BY ${RANK} LIMIT ?`,
       [wanted.map(quote).join(' AND '), limit * 3],
     ), EVERY_WORD);
   }
-  // 3. Failing that, the passages that hold the most of them. Beside the subject itself they would only be noise.
-  if (chosen.length < limit && !found) {
-    add(await query<Passage>(
-      `SELECT ${COLUMNS} FROM passages WHERE passages MATCH ? ORDER BY ${RANK} LIMIT ?`,
-      [wanted.map(quote).join(' OR '), limit * 4],
-    ), SOME_WORDS);
-  }
   return chosen;
 }
 
-/** The passages written out for the model, kept within a size it has room for. */
-export function referenceText(passages: Passage[], maxChars = 3200): string {
+const ASKING =
+  /^(?:who|whom|whose|what|whats|when|where|which|why|how|is|are|was|were|does|do|did|tell me|explain|describe|define)\b/i;
+
+/**
+ * True for something asked, as opposed to a remark or a request to write
+ * something. "Can you make that shorter?" is a request however it is put, and
+ * "could you tell me who wrote it" is a question.
+ */
+export function asks(text: string): boolean {
+  const said = text.trim().replace(/^please[,\s]+/i, '');
+  const polite = said.replace(/^(?:can|could|would|will) you (?:please )?/i, '');
+  if (polite !== said) return ASKING.test(polite);
+  return /\?\s*$/.test(said) || ASKING.test(said);
+}
+
+/** True when a message asks what a word means, which is what a dictionary is for. */
+export const aboutAWord = (text: string) =>
+  /\b(?:define|definition|mean|means|meaning|meant)\b/i.test(text) ||
+  (/^what(?:'s|s| is| are)\b/i.test(text.trim()) && terms(text).length === 1);
+
+/**
+ * The finds worth giving to the model. Handed over with every message, loosely
+ * related passages are noise the model then repeats, so:
+ * for a question, an article it names or a passage holding all its words;
+ * for anything else, only an article named by two words or more ("the Roman
+ * Empire", not "autumn" or "lol"), with what else was found in that article.
+ */
+export function worthUsing(found: Passage[], message: string): Passage[] {
+  if (asks(message)) return found.filter((p) => (p.score ?? 0) > SOME_WORDS);
+  const named = found.filter((p) => (p.score ?? 0) >= STRONG && (p.words ?? 0) >= 2);
+  const titles = new Set(named.map((p) => p.title));
+  return found.filter((p) => named.includes(p) || ((p.score ?? 0) >= FURTHER && (p.score ?? 0) < STRONG && titles.has(p.title)));
+}
+
+/**
+ * The passages written out for the model, kept within a size it has room for.
+ * Each is headed by where it is from, in words the model can repeat: numbering
+ * them led it to cite "[1]" or "index 1", which means nothing to the reader.
+ */
+export function referenceText(
+  passages: Passage[], maxChars = 3200, from: (passage: Passage) => string = () => 'Library',
+): string {
   const each = Math.floor(maxChars / Math.max(1, passages.length));
   return passages
-    .map((p, i) => `[${i + 1}] ${p.title}\n${p.body.length > each ? `${p.body.slice(0, each).trimEnd()}…` : p.body}`)
+    .map((p) => `${from(p)}: ${p.title}\n${p.body.length > each ? `${p.body.slice(0, each).trimEnd()}…` : p.body}`)
     .join('\n\n');
 }
 
 /** A question with reference material in front of it, as the model is given it. */
 export function withReferences(question: string, references: string): string {
   return (
-    'Reference material from the offline library. Use it to answer and to check your facts: ' +
-    'where it covers the question, trust it over what you remember. Where it does not, answer from what you know.\n\n' +
+    "Reference material from the user's offline library follows. Each piece is headed by its source and title. " +
+    'Use it to answer and to check your facts: where it covers the question, trust it over what you remember. ' +
+    'Where it does not, answer from what you know. If you say where something comes from, name the source and ' +
+    'title in words, such as "the Wikipedia article on Photosynthesis". Never mention numbers, brackets, an index ' +
+    'or "the reference material".\n\n' +
     `${references}\n\nQuestion: ${question}`
   );
 }

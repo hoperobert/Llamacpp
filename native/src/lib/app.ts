@@ -31,7 +31,7 @@ import {
   blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store, STYLES,
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
-import { referenceText, worthLookingUp } from './retrieval';
+import { asks, referenceText, worthLookingUp, worthUsing, type Passage } from './retrieval';
 import { describeClose, type Session } from './session';
 import { createStore } from './store';
 import { cleanTitle, isBrokenTitle } from './text';
@@ -721,13 +721,24 @@ async function lookUp(text: string, chat: Chat): Promise<{ context?: string; sou
   // A short follow-up ("how tall is it?") only makes sense with the question before it.
   const previous = [...chat.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
   const question = text.split(/\s+/).length < 6 && previous ? `${previous} ${text}` : text;
-  app.set({ status: 'Looking it up…' });
-  const passages = await lookup(question).catch(() => []);
-  app.set({ status: '' });
+  const found = worthUsing(await lookup(question, 3, asks(text)).catch(() => []), text);
+  // What the model was already given earlier in this chat is still in front of it.
+  const given = chat.messages.slice(chat.cut).map((m) => m.context ?? '').join('\n');
+  const passages = found.filter((p) => !given.includes(p.body.slice(0, 80)));
   if (!passages.length) return {};
   // A model with a small context is given less to read, so there is room left for the chat.
   const room = Math.min(3200, Math.round(app.get().settings.nCtx * 0.8));
-  return { context: referenceText(passages, room), sources: [...new Set(passages.map((p) => p.title))] };
+  return {
+    context: referenceText(passages, room, sourceName),
+    sources: [...new Set(passages.map((p) => p.title))],
+  };
+}
+
+/** Where a passage is from, as the model should call it: "Wikipedia", "Dictionary", or the name of a file. */
+function sourceName(passage: Passage): string {
+  const source = SOURCES.find((s) => s.id === passage.source);
+  if (!source) return passage.source.replace(/\.[a-z0-9]+$/i, '');
+  return source.name.startsWith('Wikipedia') ? 'Wikipedia' : source.name;
 }
 
 /** Lets the user pick a photo, or take one, to send with their next message. */

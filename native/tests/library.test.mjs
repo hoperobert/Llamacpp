@@ -106,9 +106,14 @@ assert.equal((await top('What is the capital of Australia?'))[0], 'Australia', '
 const { retrieve } = await import('../src/lib/retrieval.ts');
 const words = files.get('library-howto.db');
 const ask = (question, options) => retrieve(async (sql, params) => words.prepare(sql).all(...params), question, 3, options);
-assert.equal((await ask('how hot should water be to treat a burn', { entriesOnly: true })).length, 1);
-assert.deepEqual(await ask('is ice good for a burn', { entriesOnly: true }), []);
-assert.ok((await ask('is ice good for a burn')).length > 0);
+assert.equal((await ask('what does treat a burn mean', { entriesOnly: true })).length, 1);
+assert.deepEqual(await ask('how hot should water be to treat a burn', { entriesOnly: true }), [], 'not asked what a word means');
+// A passage that holds every word of a question is found. One that holds only some is not.
+assert.ok((await ask('should I use ice on a burn?')).length > 0);
+assert.deepEqual(await ask('is ice good for a burn'), []);
+// Something that is not a question is only matched against titles.
+assert.deepEqual(await ask('use ice on that burn', { asking: false }), []);
+assert.equal((await ask('write a note on how to treat a burn', { asking: false }))[0].title, 'Treat a Burn');
 await library.removeSource(howto);
 
 // ---------- your own files ----------
@@ -124,8 +129,42 @@ assert.ok(!(await top('boiler pressure')).includes('boiler.txt'));
 
 // ---------- what the model is given ----------
 const passages = await library.lookup('What is the capital of Australia?');
-const references = referenceText(passages, 600);
-assert.ok(references.startsWith('[1] Australia\n'));
+const references = referenceText(passages, 600, () => 'Wikipedia');
+// Headed by source and title in words, never by a number the model would then cite.
+assert.ok(references.startsWith('Wikipedia: Australia\n'));
+assert.ok(!/\[\d\]/.test(references));
+assert.ok(referenceText(passages, 600).startsWith('Library: Australia\n'));
+
+// What is worth handing over: an article the message names always, a passage that
+// only shares its words for a question, and scraps never.
+const { worthUsing } = await import('../src/lib/retrieval.ts');
+const article = { title: 'Vaccine', body: 'x', source: 's', pos: 0, score: 1021, words: 1 };
+const deeper = { title: 'Roman Empire', body: 'y', source: 's', pos: 4, score: 900 };
+const phrase = { title: 'Roman Empire', body: 'x', source: 's', pos: 0, score: 1022, words: 2 };
+const maybe = { title: 'Drain', body: 'x', source: 's', pos: 0, score: 711, words: 1 };
+const mention = { title: 'Jane Austen', body: 'x', source: 's', pos: 3, score: 499 };
+const scrap = { title: 'Shorter', body: 'x', source: 's', pos: 2, score: 98 };
+const kept = (found, message) => worthUsing(found, message).map((p) => `${p.title}#${p.pos}`);
+assert.deepEqual(kept([article, maybe, mention, scrap], 'How do vaccines work?'), ['Vaccine#0', 'Drain#0', 'Jane Austen#3']);
+assert.deepEqual(kept([article, mention, scrap], 'tell me about vaccines'), ['Vaccine#0', 'Jane Austen#3']);
+assert.deepEqual(kept([mention, scrap], 'make that a bit shorter please'), [], 'a remark is not looked up');
+assert.deepEqual(kept([article, maybe, mention], 'lol vaccines'), [], 'nor is one word in passing');
+assert.deepEqual(kept([phrase, deeper, article, mention], 'write an essay on the Roman Empire'), ['Roman Empire#0', 'Roman Empire#4'], 'but something named in full is');
+assert.deepEqual(kept([scrap], 'what should I do next?'), []);
+
+// A polite request is still a request, and a polite question still a question.
+const { asks } = await import('../src/lib/retrieval.ts');
+assert.equal(asks('can you rewrite that more formally?'), false);
+assert.equal(asks('could you make it shorter'), false);
+assert.equal(asks('can you tell me who wrote Pride and Prejudice?'), true);
+assert.equal(asks('please explain how vaccines work'), true);
+assert.equal(asks('is it safe?'), true);
+assert.equal(asks('thanks'), false);
+
+// Pages that are only lists of links are passed over.
+await library.addText('Index of biology articles', 'Photosynthesis. Vaccine. Cell. Enzyme. Panda. Bamboo.');
+assert.ok(!(await top('What do pandas eat?')).includes('Index of biology articles'));
+await library.removeText('Index of biology articles');
 assert.ok(references.length < 700, 'kept within the room allowed');
 const asked = withReferences('What is the capital of Australia?', references);
 assert.ok(asked.includes(references));

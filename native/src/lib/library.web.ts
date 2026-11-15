@@ -37,4 +37,5 @@ export async function addText(name: string, text: string) {
 export async function removeText(name: string) { files = files.filter((f) => f.name !== name); return files; }
 export async function restoreLibrary(onChange: Listener) { listener = onChange; }
 export const libraryReady = () => ready.size > 0 || files.length > 0;
-export const lookup = async (): Promise<Passage[]> => (ready.size ? SAMPLE : []);
+export const lookup = async (_question?: string, _limit?: number, _asking?: boolean): Promise<Passage[]> =>
+  (ready.size ? SAMPLE.map((p) => ({ ...p, score: 1021, words: 1 })) : []);
