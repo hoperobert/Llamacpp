@@ -37,6 +37,14 @@ few minutes to process it, then it appears in the TestFlight app.
 Signing in is either `npx eas-cli@latest login`, or an Expo access token in
 the `EXPO_TOKEN` environment variable.
 
+### Building on GitHub instead
+
+Expo's free plan allows a set number of iOS builds a month. The same build can
+be made on GitHub's Mac, which is free for a public repository and has no such
+limit: change `testflight/build` and push, and GitHub builds the app and sends
+it to TestFlight. It needs an Expo access token saved as a repository secret
+named `EXPO_TOKEN`. See `testflight/README.md`.
+
 ### Fixes without a build
 
 A change that is only code does not need a new build. Publishing it makes it
