@@ -22,6 +22,7 @@ import {
 import { COMMANDS } from './commands';
 import { engineVersion, usesGPU } from './engine';
 import { neverAskToNotify } from './notify';
+import { hasNative } from '../../modules/pocket-native';
 import { alarm, battery, screenBrightness, torch, whereAmI } from './phone';
 import { pythonReady } from './python';
 import { PYTHON_FILES } from './runner';
@@ -128,6 +129,32 @@ export async function variants() {
     await wait(1500);
   }
   flags.set(DEFAULT_FLAGS);
+}
+
+/** The code as it is sent to a build of the app made before its newer native parts: what is left has to work. */
+async function olderBuild() {
+  step('this is the code for an older build: no running code, voice, torch or reminders');
+  router.push('/emergency');
+  step('emergency open');
+  await wait(4000);
+  router.back();
+  await wait(1200);
+  await ask('My friend is choking what do I do');
+  const helped = app.get().chat.messages;
+  step(`first aid question: sources ${JSON.stringify(helped.at(-2)?.sources)} reply ${JSON.stringify(helped.at(-1)?.content.slice(0, 200))}`);
+  send('Directions to Kings Cross');
+  await wait(2500);
+  step(`directions offered: ${JSON.stringify(app.get().chat.messages.at(-1)?.action)}`);
+  send('Remind me to call the dentist tomorrow at 9');
+  await until(() => app.get().busy, 8000);
+  await until(() => !app.get().busy, 120000);
+  step(`reminder left to the model: card ${!!app.get().chat.messages.at(-1)?.action} ${state()}`);
+  changeSettings({ emergency: true });
+  await ask('How do I make water safe to drink?');
+  step(`emergency mode reply: ${JSON.stringify(app.get().chat.messages.at(-1)?.content.slice(0, 300))} sources ${JSON.stringify(app.get().chat.messages.at(-2)?.sources)}`);
+  changeSettings({ emergency: false });
+  newChat();
+  await wait(1500);
 }
 
 /**
@@ -246,7 +273,8 @@ async function scenario() {
   step(`model ${state()}`);
   await wait(2500);
 
-  await newThings();
+  if (hasNative) await newThings();
+  else await olderBuild();
 
   // ---------- the keyboard ----------
   keyboard(true);

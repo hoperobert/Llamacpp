@@ -1,3 +1,4 @@
+import { hasNative } from '../../../modules/pocket-native';
 import React from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
 import * as Application from 'expo-application';
@@ -63,10 +64,12 @@ export default function SettingsScreen() {
             t={t} title="Do things on this iPhone"
             value={settings.assistant} onChange={(assistant) => changeSettings({ assistant })}
           />
-          <SwitchRow
-            t={t} title="Finish in the background"
-            value={settings.background} onChange={(background) => changeSettings({ background })}
-          />
+          {hasNative && (
+            <SwitchRow
+              t={t} title="Finish in the background"
+              value={settings.background} onChange={(background) => changeSettings({ background })}
+            />
+          )}
         </Section>
 
         <Section t={t} title="Context">

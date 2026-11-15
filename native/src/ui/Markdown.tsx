@@ -6,6 +6,7 @@ import React from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { copyText, runCode } from '../lib/app';
 import { runnable } from '../lib/runner';
+import { hasNative } from '../../modules/pocket-native';
 import { Icon } from './Icon';
 import type { Theme } from './theme';
 
@@ -130,7 +131,8 @@ function Inline({ text, t }: { text: string; t: Theme }) {
 }
 
 function CodeBlock({ block, t }: { block: Extract<Block, { type: 'code' }>; t: Theme }) {
-  const kind = block.closed ? runnable(block.lang, block.text) : null;
+  // An older build of the app has nothing to run code in.
+  const kind = block.closed && hasNative ? runnable(block.lang, block.text) : null;
   return (
     <View style={[styles.code, { backgroundColor: t.c.fill }]}>
       <View style={styles.codeHead}>

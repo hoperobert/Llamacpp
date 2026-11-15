@@ -6,6 +6,7 @@ import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { app, attachPhoto, changeSettings, download, findModel, pickFile } from '../lib/app';
 import { formatMB, visionAddon } from '../lib/models';
+import { hasNative } from '../../modules/pocket-native';
 import { STYLES } from '../lib/storage';
 import { ChoiceRow, Row, Section, SwitchRow } from '../ui/List';
 import { useTheme, type Theme } from '../ui/theme';
@@ -55,16 +56,22 @@ function PhotoRow({ t }: { t: Theme }) {
   const progress = app.use((s) => (addon ? s.downloads[addon.id] : undefined));
   if (engine.status !== 'ready') return null;
 
+  // Reading the words in a photo needs a part of the app an older build does not have.
+  const photos = engine.vision || hasNative;
   const attach = (
     <>
-      <Row
-        t={t} icon="photo" title={engine.vision ? 'Photo library' : 'Read text in a photo'}
-        onPress={async () => { await attachPhoto('library'); router.back(); }}
-      />
-      <Row
-        t={t} icon="camera" title={engine.vision ? 'Take photo' : 'Read text with the camera'}
-        onPress={async () => { await attachPhoto('camera'); router.back(); }}
-      />
+      {photos && (
+        <Row
+          t={t} icon="photo" title={engine.vision ? 'Photo library' : 'Read text in a photo'}
+          onPress={async () => { await attachPhoto('library'); router.back(); }}
+        />
+      )}
+      {photos && (
+        <Row
+          t={t} icon="camera" title={engine.vision ? 'Take photo' : 'Read text with the camera'}
+          onPress={async () => { await attachPhoto('camera'); router.back(); }}
+        />
+      )}
       <Row t={t} icon="doc.text" title="File" onPress={async () => { await pickFile(); router.back(); }} />
     </>
   );

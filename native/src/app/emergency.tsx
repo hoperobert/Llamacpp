@@ -13,6 +13,7 @@ import { sourceDownload, SOURCES } from '../lib/library';
 import { formatMB } from '../lib/models';
 import { alarm, allOff, battery, heading, screenBrightness, torch, whereAmI, type Place } from '../lib/phone';
 import { PYTHON_MB } from '../lib/runner';
+import { hasNative } from '../../modules/pocket-native';
 import { Icon, type IconName } from '../ui/Icon';
 import { Row, Section, SwitchRow } from '../ui/List';
 import { useTheme, type Theme } from '../ui/theme';
@@ -133,13 +134,18 @@ export default function EmergencyScreen() {
         </Text>
 
         <View style={styles.grid}>
-          <Big t={t} icon={light ? 'flashlight.on.fill' : 'flashlight.off.fill'} label="Torch" on={light} onPress={toggleTorch} />
+          {hasNative && <Big t={t} icon={light ? 'flashlight.on.fill' : 'flashlight.off.fill'} label="Torch" on={light} onPress={toggleTorch} />}
           <Big t={t} icon="bolt.fill" label="Flash SOS" on={sos} onPress={toggleSos} />
-          <Big t={t} icon="speaker.wave.3" label="Alarm" on={loud} onPress={toggleAlarm} />
+          {hasNative && <Big t={t} icon="speaker.wave.3" label="Alarm" on={loud} onPress={toggleAlarm} />}
           <Big t={t} icon="sun.max" label="Screen light" on={screen} onPress={toggleScreen} />
         </View>
+        {!hasNative && (
+          <Text style={[styles.note, { color: t.c.tertiary }]}>
+            The torch, an alarm and your location come with the next version of the app.
+          </Text>
+        )}
 
-        <Section t={t} title="Where I am" footer="This comes from GPS, which needs no signal or internet. Outdoors under open sky is best.">
+        {hasNative && <Section t={t} title="Where I am" footer="This comes from GPS, which needs no signal or internet. Outdoors under open sky is best.">
           {found ? (
             <>
               <Row
@@ -162,7 +168,7 @@ export default function EmergencyScreen() {
               onPress={place === 'looking' ? undefined : find}
             />
           )}
-        </Section>
+        </Section>}
 
         <Section
           t={t} title="Answers"
@@ -288,12 +294,12 @@ function Ready({ t }: { t: Theme }) {
   const missing =
     (have.length ? 0 : smallest?.sizeMB ?? 0) +
     (medicine && library[medicine.id]?.status !== 'ready' ? medicine.sizeMB : 0) +
-    (python.status === 'ready' ? 0 : PYTHON_MB);
+    (python.status === 'ready' || !hasNative ? 0 : PYTHON_MB);
   const getAll = () => {
     haptic();
     if (!have.length && smallest && !downloads[smallest.id]) download(smallest);
     if (medicine && library[medicine.id]?.status !== 'ready' && !downloads[sourceDownload(medicine).id]) installSource(medicine);
-    if (python.status === 'missing') getPython();
+    if (hasNative && python.status === 'missing') getPython();
   };
 
   return (
@@ -307,11 +313,11 @@ function Ready({ t }: { t: Theme }) {
         onPress={have.length || modelBusy || !smallest ? undefined : () => download(smallest)}
       />
       {sourceRow(medicine, true)}
-      <Row
+      {hasNative && <Row
         t={t} icon={python.status === 'ready' ? 'checkmark.circle.fill' : 'arrow.down.circle'} title="Python"
         value={python.status === 'ready' ? 'On this iPhone' : python.status === 'downloading' ? `${Math.round(python.fraction * 100)}%` : `Get · ${PYTHON_MB} MB`}
         onPress={python.status === 'missing' ? () => { haptic(); getPython(); } : undefined}
-      />
+      />}
       {sourceRow(howto, false)}
       {missing > 0 && <Row t={t} icon="arrow.down" title="Get everything missing" value={formatMB(missing)} onPress={getAll} />}
       <Row t={t} icon="checkmark.circle.fill" title="First aid and survival steps" value="Built in" />

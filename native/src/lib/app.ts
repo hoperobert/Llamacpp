@@ -1019,7 +1019,7 @@ export async function send(text: string, photo: string | null = null, file: Stat
   const asked: Message = { id: newId(), role: 'user', content: text, image };
   // Something to do on the phone ("remind me to…") is offered as a card to approve, not sent to the model.
   const plain = !photo && !file && !typed && app.get().settings.assistant;
-  const action = plain ? findAction(text, Date.now()) : null;
+  const action = plain ? offerable(text) : null;
   if (action) {
     const card = offer(action);
     await saveChat({ ...chat, title, messages: [...chat.messages, asked, card] });
@@ -1032,7 +1032,8 @@ export async function send(text: string, photo: string | null = null, file: Stat
     return;
   }
   // A question about the phone ("what's on my calendar?") is answered from the phone.
-  const phone = plain ? findLookup(text, Date.now()) : null;
+  // Reading the calendar or the location needs parts of the app an older build does not have.
+  const phone = plain && hasNative ? findLookup(text, Date.now()) : null;
   let found: { context?: string; sources?: string[] } = {};
   if (phone) {
     const got = await read(phone);
@@ -1074,6 +1075,18 @@ export async function send(text: string, photo: string | null = null, file: Stat
 }
 
 // ---------- doing things on the phone ----------
+
+/**
+ * What a message asks the app to do, if it is something this build of the app
+ * can do. An older build has no way into Reminders, Calendar or Contacts, but
+ * can still start a message or an email, call a number and open Maps.
+ */
+function offerable(text: string): Action | null {
+  const action = findAction(text, Date.now());
+  if (!action || hasNative) return action;
+  if (action.kind === 'message' || action.kind === 'email' || action.kind === 'directions') return action;
+  return action.kind === 'call' && /^[+\d][\d\s()-]{4,}$/.test(action.to) ? action : null;
+}
 
 /** A reply that is an offer to do something, shown as a card to approve. */
 function offer(action: Action): Message {
@@ -1326,6 +1339,10 @@ export async function attachFile(uri: string, name?: string) {
   const shown = name || decodeURIComponent(uri.split('/').pop() ?? 'File');
   try {
     const pdf = /\.pdf$/i.test(shown) || /\.pdf(?:$|\?)/i.test(uri);
+    if (pdf && !hasNative) {
+      toast('Reading PDFs comes with the next version of the app');
+      return;
+    }
     // The browser preview hands over a file as an address to fetch.
     const text = pdf ? await pdfText(uri) : /^(blob|data|https?):/.test(uri) ? await (await fetch(uri)).text() : await new File(uri).text();
     if (!text.trim()) {
@@ -1376,7 +1393,7 @@ export function submit() {
   }
   if (!text && !attachment && !attachedFile) return;
   // Something to do on the phone needs no model.
-  const forThePhone = !attachment && !attachedFile && app.get().settings.assistant && !!findAction(text, Date.now());
+  const forThePhone = !attachment && !attachedFile && app.get().settings.assistant && !!offerable(text);
   if (state.status !== 'ready' && !forThePhone) return;
   haptic();
   app.set({ draft: '', attachment: null, attachedFile: null });
@@ -1566,7 +1583,7 @@ export function runCommand(command: Command, arg: string) {
     case 'chats': router.push('/chats'); break;
     case 'projects': router.push('/projects'); break;
     case 'library': router.push('/library'); break;
-    case 'tools': router.push('/tools'); break;
+    case 'tools': if (hasNative) router.push('/tools'); else toast('That comes with the next version of the app'); break;
     case 'emergency': router.push('/emergency'); break;
     case 'settings': router.push('/settings'); break;
     // Typing a slash is what lists the commands.
@@ -1576,7 +1593,11 @@ export function runCommand(command: Command, arg: string) {
         toast(`Add ${command.takes} after /${command.name}`);
         break;
       }
-      const action = findAction(asRequest(command.name, arg) ?? '', Date.now());
+      const action = offerable(asRequest(command.name, arg) ?? '');
+      if (!action && !hasNative && findAction(asRequest(command.name, arg) ?? '', Date.now())) {
+        toast('That comes with the next version of the app');
+        break;
+      }
       if (!action) {
         toast(command.name === 'event' ? 'Say when, such as "on Friday at 7pm"' : command.name === 'timer' ? 'Say how long, such as "10 minutes"' : 'Could not work that out');
         app.set({ draft: `/${command.name} ${arg}` });
@@ -1590,12 +1611,16 @@ export function runCommand(command: Command, arg: string) {
       break;
     }
     case 'run': {
+      if (!hasNative) {
+        toast('That comes with the next version of the app');
+        break;
+      }
       const reply = [...chat.messages].reverse().find((m) => m.role === 'assistant' && !m.action);
       const code = reply ? lastCode(reply.content) : null;
       if (!code || !runCode(code.lang, code.code)) toast('No JavaScript or HTML in the last reply to run');
       break;
     }
-    case 'voice': talk(); break;
+    case 'voice': if (hasNative) talk(); else toast('That comes with the next version of the app'); break;
     case 'file': pickFile(); break;
     case 'photo': attachPhoto('library'); break;
   }

@@ -3,6 +3,7 @@
 import { expandCommand, subjectOf } from './commands';
 import * as engine from './engine';
 import { EMERGENCY } from './mode';
+import { hasNative } from '../../modules/pocket-native';
 import { newId, STYLES, type Chat, type Memory, type Project, type Settings } from './storage';
 import { withReferences } from './retrieval';
 import { cleanTitle, takingTurns, withoutThinking } from './text';
@@ -18,8 +19,8 @@ export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[],
     "You are a helpful assistant running privately on the user's own device. " +
       `Keep answers clear and concise. Today is ${new Date().toDateString()}.`,
     // The Run button on a code block. Said so that a model asked for something to run picks a language that can be.
-    'The user can run JavaScript, and open HTML pages, that you write in code blocks on this device.',
   ];
+  if (hasNative) parts.push('The user can run JavaScript and Python, and open HTML pages, that you write in code blocks on this device.');
   const style = STYLES.find((s) => s.id === settings.style)?.prompt;
   if (settings.emergency) parts.push(EMERGENCY);
   else if (style) parts.push(style);

@@ -43,6 +43,11 @@ jobs:
       - name: Choose what to test
         run: |
           mode="$(head -1 sim/run | tr -d '[:space:]')"
+          # "real-lite" is the real engine with the code as it is sent to an older build of the app.
+          if [ "$mode" = real-lite ]; then
+            echo "POCKET_LITE=1" >> "$GITHUB_ENV"
+            mode=real
+          fi
           case "$mode" in real|1) ;; *) mode=real ;; esac
           echo "POCKET_SIM=$mode" >> "$GITHUB_ENV"
           echo "Testing with POCKET_SIM=$mode"

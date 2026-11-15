@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { hasNative } from '../../modules/pocket-native';
 import { app, findModel, haptic, runCommand, submit, talk } from '../lib/app';
 import { parseCommand, suggest, type Command } from '../lib/commands';
 import { imageUri } from '../lib/images';
@@ -174,7 +175,7 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
             </Text>
           </Pressable>
           <View style={styles.flex} />
-          {(listening || (!typed && !busy && !acts && ready)) ? (
+          {(listening || (hasNative && !typed && !busy && !acts && ready)) ? (
             // With nothing typed, the button is for speaking: it listens, sends, and the reply is read aloud.
             <Pressable
               onPress={talk}
