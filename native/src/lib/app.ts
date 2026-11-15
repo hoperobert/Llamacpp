@@ -6,8 +6,10 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Network from 'expo-network';
+import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
 
+import { onOrOff, parseCommand, subjectOf, type Command } from './commands';
 import { freeDiskMB, ramMB } from './device';
 import {
   deleteModel, isDownloaded, modelUri, pauseDownload, restoreDownloads, resumeFailedDownloads, startDownload,
@@ -25,7 +27,7 @@ import {
 } from './library';
 import { fit, formatMB, modelFromUrl, MODELS, visionAddon, type Model } from './models';
 import {
-  blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store,
+  blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store, STYLES,
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
 import { referenceText, worthLookingUp } from './retrieval';
@@ -670,20 +672,21 @@ async function runTurn(userText: string | null) {
 }
 
 export async function send(text: string, photo: string | null = null) {
-  const remember = text.match(/^\/remember\s+([\s\S]+)/i);
-  if (remember) {
-    const next = addMemory(app.get().memories, remember[1]);
-    if (next) { saveMemories(next); toast('Saved to memory'); } else toast('Already in memory');
+  const typed = parseCommand(text);
+  if (typed && !typed.command.prompt) {
+    runCommand(typed.command, typed.arg);
     return;
   }
   const chat = app.get().chat;
   // A freshly picked photo is copied into the app's storage. An incognito chat leaves no copy.
   const fresh = !!photo && /^(file|blob|data|https?):/.test(photo);
   const image = photo && fresh && !chat.incognito ? await keepImage(photo) : photo ?? undefined;
-  const found = await lookUp(text, chat);
+  // "/plan a trip to Rome" is about a trip to Rome.
+  const subject = subjectOf(text);
+  const found = await lookUp(subject, chat);
   await saveChat({
     ...chat,
-    title: chat.messages.length ? chat.title : (text || 'Photo').replace(/\s+/g, ' ').slice(0, 48),
+    title: chat.messages.length ? chat.title : (subject || 'Photo').replace(/\s+/g, ' ').slice(0, 48),
     messages: [...chat.messages, { id: newId(), role: 'user', content: text, image, ...found }],
   });
   runTurn(text);
@@ -716,6 +719,18 @@ export async function attachPhoto(from: 'library' | 'camera' = 'library') {
 export function submit() {
   const { busy, draft, attachment, engine: state } = app.get();
   const text = draft.trim();
+  const typed = parseCommand(text);
+  if (typed && !typed.command.prompt) {
+    // A command that acts on the app runs straight away, whatever the model is doing.
+    haptic();
+    app.set({ draft: '' });
+    runCommand(typed.command, typed.arg);
+    return;
+  }
+  if (typed?.command.prompt && !typed.arg && !typed.command.prompt.bare) {
+    toast(`Add ${typed.command.takes} after /${typed.command.name}`);
+    return;
+  }
   if (busy) {
     // With something typed, line it up for after this reply. With nothing typed, stop.
     if (text) {
@@ -836,6 +851,106 @@ export async function summariseNow() {
     if (next) await saveChat(next);
   });
   app.set({ busy: false, status: '' });
+}
+
+// ---------- slash commands ----------
+
+const LENGTHS: Record<string, number> = { short: 256, medium: 768, long: 1536, max: 3072 };
+
+/** Carries out a command that acts on the app. Requests to the model are sent as messages instead. */
+export function runCommand(command: Command, arg: string) {
+  const { chat, settings, engine: state, downloaded } = app.get();
+  const hasMessages = chat.messages.length > 0;
+  const needsChat = () => { if (!hasMessages) toast('Nothing in this chat yet'); return hasMessages; };
+  switch (command.name) {
+    case 'new': newChat({ projectId: chat.projectId }); break;
+    case 'incognito': newChat({ incognito: true }); break;
+    case 'retry': regenerate(); break;
+    case 'stop': stop(); break;
+    case 'compact': summariseNow(); break;
+    case 'context': {
+      const { memories, project } = contextFor(chat);
+      const used = usedTokens(chat, settings, memories, project);
+      toast(`Context ${Math.min(100, Math.round((used / settings.nCtx) * 100))}% full`);
+      break;
+    }
+    case 'rename':
+      if (!needsChat() || chat.incognito) break;
+      if (arg) renameChat(chat.id, arg);
+      else Alert.prompt('Rename Chat', undefined, (title) => renameChat(chat.id, title), 'plain-text', chat.title);
+      break;
+    case 'pin': if (needsChat() && !chat.incognito) togglePin(chat); break;
+    case 'share': if (needsChat()) shareChat(chat.id); break;
+    case 'delete': if (needsChat()) removeChat(chat); break;
+    case 'goal': setGoal(arg); break;
+
+    case 'model': {
+      if (!arg) { router.push('/models'); break; }
+      const wanted = arg.toLowerCase().replace(/\s+/g, '');
+      const model = allModels().find((m) => downloaded[m.id] && m.name.toLowerCase().replace(/\s+/g, '').includes(wanted));
+      if (!model) toast(`No model like "${arg}" on this iPhone`);
+      else if (model.id !== state.modelId || state.status !== 'ready') switchModel(model);
+      break;
+    }
+    case 'think': {
+      const thinking = onOrOff(arg, settings.thinking);
+      if (thinking === null) { toast('Use /think on or /think off'); break; }
+      changeSettings({ thinking });
+      toast(thinking ? 'Thinking first' : 'Not thinking first');
+      break;
+    }
+    case 'lookup': {
+      if (!libraryReady()) { router.push('/library'); break; }
+      const lookup = onOrOff(arg, settings.lookup);
+      if (lookup === null) { toast('Use /lookup on or /lookup off'); break; }
+      changeSettings({ lookup });
+      toast(lookup ? 'Looking things up' : 'Not looking things up');
+      break;
+    }
+    case 'style': {
+      const style = STYLES.find((s) => arg && s.id.startsWith(arg.toLowerCase()));
+      if (!style) { toast(`Styles: ${STYLES.map((s) => s.id).join(', ')}`); break; }
+      changeSettings({ style: style.id });
+      toast(`Style: ${style.label}`);
+      break;
+    }
+    case 'length': {
+      const name = Object.keys(LENGTHS).find((key) => arg && key.startsWith(arg.toLowerCase()));
+      if (!name) { toast('Lengths: short, medium, long, max'); break; }
+      changeSettings({ maxTokens: LENGTHS[name] });
+      toast(`Length: ${name}`);
+      break;
+    }
+
+    case 'remember':
+      if (!arg) toast('Add what to remember after /remember');
+      else toast(remember(arg) ? 'Saved to memory' : 'Already in memory');
+      break;
+    case 'memory': router.push('/settings/memory'); break;
+    case 'chats': router.push('/chats'); break;
+    case 'projects': router.push('/projects'); break;
+    case 'library': router.push('/library'); break;
+    case 'settings': router.push('/settings'); break;
+    // Typing a slash is what lists the commands.
+    case 'help': app.set({ draft: '/' }); break;
+  }
+}
+
+/** Sets, shows or clears what this chat is for. The model is reminded of it in every reply. */
+async function setGoal(arg: string) {
+  const { chat } = app.get();
+  if (!arg) {
+    toast(chat.goal ? `Goal: ${chat.goal}` : 'Add the goal after /goal');
+    return;
+  }
+  const clearing = ['clear', 'off', 'none', 'done'].includes(arg.toLowerCase());
+  const goal = clearing ? undefined : arg.replace(/\s+/g, ' ').slice(0, 300);
+  // The measured size of the chat no longer holds once the instructions change.
+  const next = { ...chat, goal, ctx: null };
+  if (chat.messages.length) await saveChat(next);
+  else app.set({ chat: next });
+  haptic('success');
+  toast(clearing ? 'Goal cleared' : 'Goal set');
 }
 
 // ---------- the offline library ----------

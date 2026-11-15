@@ -2,10 +2,11 @@
 // shown, and changed, from here.
 
 import React, { useEffect, useState } from 'react';
-import { Image, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { app, findModel, haptic, submit } from '../lib/app';
+import { app, findModel, haptic, runCommand, submit } from '../lib/app';
+import { parseCommand, suggest, type Command } from '../lib/commands';
 import { imageUri } from '../lib/images';
 import { STYLES } from '../lib/storage';
 import { Glass } from './Glass';
@@ -34,14 +35,30 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   const engine = app.use((s) => s.engine);
   const thinking = app.use((s) => s.settings.thinking);
   const styleId = app.use((s) => s.settings.style);
+  const goal = app.use((s) => !!s.chat.goal);
   // What is switched on, shown quietly next to the model's name.
   const lookingUp = app.use((s) => s.settings.lookup && (s.libraryFiles.length > 0 || Object.values(s.library).some((l) => l.status === 'ready')));
-  const extras = [thinking ? 'Think' : '', lookingUp ? 'Look up' : '', styleId !== 'normal' ? STYLES.find((s) => s.id === styleId)?.label : '']
+  const extras = [goal ? 'Goal' : '', thinking ? 'Think' : '', lookingUp ? 'Look up' : '', styleId !== 'normal' ? STYLES.find((s) => s.id === styleId)?.label : '']
     .filter(Boolean).join(' · ');
 
   const ready = engine.status === 'ready';
   const typed = !!draft.trim() || !!attachment;
-  const canSend = busy || (ready && typed);
+  // A command that acts on the app can be sent with no model loaded.
+  const command = parseCommand(draft);
+  const acts = !!command && !command.command.prompt;
+  const canSend = busy || (ready && typed) || acts;
+  const commands = suggest(draft);
+
+  const choose = (chosen: Command) => {
+    haptic('select');
+    if (chosen.takes) {
+      // Something goes after it: leave it in the box to be finished.
+      app.set({ draft: `/${chosen.name} ` });
+    } else {
+      app.set({ draft: '' });
+      runCommand(chosen, '');
+    }
+  };
   // While a reply is being written the button stops it, unless there is something to queue.
   const stops = busy && !typed;
   const model = findModel(engine.modelId);
@@ -68,6 +85,24 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
           <Text numberOfLines={1} style={[styles.queuedText, { color: t.c.secondary }]}>Next: {queued}</Text>
         </Pressable>
       )}
+      {commands.length > 0 && (
+        <Glass c={t.c} style={styles.commands}>
+          <ScrollView keyboardShouldPersistTaps="always" showsVerticalScrollIndicator={false}>
+            {commands.map((item) => (
+              <Pressable
+                key={item.name}
+                onPress={() => choose(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`/${item.name}. ${item.hint}`}
+                style={({ pressed }) => [styles.command, pressed && { backgroundColor: chip }]}
+              >
+                <Text style={[styles.commandName, { color: t.c.text }]}>/{item.name}</Text>
+                <Text numberOfLines={1} style={[styles.commandHint, { color: t.c.secondary }]}>{item.hint}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </Glass>
+      )}
       <Glass c={t.c} style={styles.box}>
         {!!attachment && (
           <View style={styles.photo}>
@@ -87,7 +122,7 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
           value={draft}
           onChangeText={(text) => app.set({ draft: text })}
           multiline
-          editable={engine.status !== 'none'}
+          autoCapitalize={draft.startsWith('/') ? 'none' : 'sentences'}
           placeholder={
             busy ? 'Queue for after this reply…'
             : ready ? 'Ask anything' : engine.status === 'loading' ? 'Getting ready…' : 'Choose a model to start'
@@ -153,6 +188,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   box: { borderRadius: 30, borderCurve: 'continuous', padding: 10 },
+  // The list of commands, shown above the box while one is being typed.
+  commands: { borderRadius: 24, borderCurve: 'continuous', paddingVertical: 6, marginBottom: 8, maxHeight: 264, overflow: 'hidden' },
+  command: { flexDirection: 'row', alignItems: 'baseline', gap: 12, paddingHorizontal: 18, paddingVertical: 11 },
+  commandName: { fontSize: 16, fontWeight: '600' },
+  commandHint: { fontSize: 15, flexShrink: 1 },
   input: { maxHeight: 150, minHeight: 40, paddingTop: 8, paddingBottom: 8, paddingHorizontal: 8 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   round: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },

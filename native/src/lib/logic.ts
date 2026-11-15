@@ -1,5 +1,6 @@
 // Prompt building, context handling and memories. No UI in here.
 
+import { expandCommand, subjectOf } from './commands';
 import * as engine from './engine';
 import { newId, STYLES, type Chat, type Memory, type Project, type Settings } from './storage';
 import { withReferences } from './retrieval';
@@ -23,6 +24,12 @@ export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[],
   }
   if (project?.instructions.trim()) {
     parts.push(`This chat is part of the project "${project.name}". Follow its instructions:\n${project.instructions.trim()}`);
+  }
+  if (chat.goal) {
+    parts.push(
+      `The user has set a goal for this conversation: ${chat.goal}\n` +
+        'Work towards it in every reply, and say plainly when it has been met.',
+    );
   }
   if (settings.memoryOn && memories.length) {
     const lines: string[] = [];
@@ -48,9 +55,11 @@ export function promptMessages(chat: Chat, settings: Settings, memories: Memory[
     ...chat.messages.slice(chat.cut).filter((m) => m.content || m.image)
       // What was looked up for a message is given to the model with it, every time,
       // so the conversation it has already read stays the same.
-      .map(({ role, content, image, context }) => ({
-        role, image, content: context ? withReferences(content, context) : content,
-      })),
+      // A request typed as a command ("/plan a trip") is written out in full here.
+      .map(({ role, content, image, context }) => {
+        const said = role === 'user' ? expandCommand(content) : content;
+        return { role, image, content: context ? withReferences(said, context) : said };
+      }),
   ];
 }
 
@@ -124,7 +133,7 @@ export async function ensureRoom(
 
 /** Asks the model for a short title for a chat. Returns '' if it has nothing usable. */
 export async function suggestTitle(chat: Chat): Promise<string> {
-  const user = chat.messages.find((m) => m.role === 'user')?.content ?? '';
+  const user = subjectOf(chat.messages.find((m) => m.role === 'user')?.content ?? '');
   const reply = chat.messages.find((m) => m.role === 'assistant')?.content ?? '';
   if (!user) return '';
   try {

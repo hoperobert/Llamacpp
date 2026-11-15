@@ -59,6 +59,9 @@ function database(): Promise<Db> {
     if (!columns.some((c) => c.name === 'project_id')) {
       await db.execAsync('ALTER TABLE chats ADD COLUMN project_id TEXT');
     }
+    if (!columns.some((c) => c.name === 'goal')) {
+      await db.execAsync('ALTER TABLE chats ADD COLUMN goal TEXT');
+    }
     const messageColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(messages)');
     if (!messageColumns.some((c) => c.name === 'image')) {
       await db.execAsync('ALTER TABLE messages ADD COLUMN image TEXT');
@@ -85,14 +88,14 @@ function inTurn<T>(job: () => Promise<T>): Promise<T> {
 
 async function writeChat(db: Db, chat: Chat) {
   await db.runAsync(
-    `INSERT INTO chats (id, title, titled, pinned, summary, cut, ctx, updated_at, project_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO chats (id, title, titled, pinned, summary, cut, ctx, updated_at, project_id, goal)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        title = excluded.title, titled = excluded.titled, pinned = excluded.pinned,
        summary = excluded.summary, cut = excluded.cut, ctx = excluded.ctx,
-       updated_at = excluded.updated_at, project_id = excluded.project_id`,
+       updated_at = excluded.updated_at, project_id = excluded.project_id, goal = excluded.goal`,
     chat.id, chat.title, chat.titled ? 1 : 0, chat.pinned ? 1 : 0, chat.summary, chat.cut,
-    chat.ctx ? JSON.stringify(chat.ctx) : null, chat.updatedAt, chat.projectId ?? null,
+    chat.ctx ? JSON.stringify(chat.ctx) : null, chat.updatedAt, chat.projectId ?? null, chat.goal ?? null,
   );
   await db.runAsync('DELETE FROM messages WHERE chat_id = ?', chat.id);
   for (let i = 0; i < chat.messages.length; i++) {
@@ -185,7 +188,7 @@ export const memoryStore = {
 
 type ChatRow = {
   id: string; title: string; titled: number; pinned: number; summary: string; cut: number;
-  ctx: string | null; updated_at: number; project_id: string | null;
+  ctx: string | null; updated_at: number; project_id: string | null; goal: string | null;
 };
 type MessageRow = {
   id: string; role: Message['role']; content: string; reasoning: string | null;
@@ -228,6 +231,7 @@ export const chatStore = {
         titled: !!row.titled,
         pinned: !!row.pinned,
         projectId: row.project_id ?? undefined,
+        goal: row.goal ?? undefined,
         summary: row.summary,
         cut: row.cut,
         ctx: row.ctx ? JSON.parse(row.ctx) : null,

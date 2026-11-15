@@ -34,6 +34,8 @@ export type Chat = {
   projectId?: string;
   /** An incognito chat is never saved, named or used for memories. */
   incognito?: boolean;
+  /** What the user said this chat is for (/goal). The model is reminded of it in every reply. */
+  goal?: string;
   messages: Message[];
   summary: string;
   /** Messages before this index are no longer sent to the model. */

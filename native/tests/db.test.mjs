@@ -52,6 +52,11 @@ assert.deepEqual((await chatStore.searchChats('vegetarian')).map((c) => c.id), [
 await chatStore.saveChat({ ...a, messages: [...a.messages, { id: 'n1', role: 'user', content: 'Thanks', image: 'images/x.jpg' }], updatedAt: 3000, projectId: undefined });
 assert.equal((await chatStore.chat('a1')).messages[4].image, 'images/x.jpg', 'a photo name is stored with its message');
 await projectStore.saveProject({ id: 'p1', name: 'Travel', instructions: 'Be brief' });
+// A chat's goal is kept with it, and can be cleared.
+await chatStore.saveChat({ ...(await chatStore.chat('a1')), goal: 'Book the trip' });
+assert.equal((await chatStore.chat('a1')).goal, 'Book the trip');
+await chatStore.saveChat({ ...(await chatStore.chat('a1')), goal: undefined });
+assert.equal((await chatStore.chat('a1')).goal, undefined);
 await chatStore.updateChat('a1', { projectId: 'p1' });
 assert.equal((await chatStore.chatList())[0].projectId, 'p1');
 await projectStore.deleteProject('p1');

@@ -62,6 +62,14 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   for how long it thought, and tapping it shows the reasoning.
 - Whether to think first, a reply **style** (Normal, Concise, Explain, Formal) and reply
   length are set from the "+" in the message box.
+- **Slash commands**: typing `/` in the message box lists them. Some are
+  requests to the model (`/plan`, `/summarise`, `/explain`, `/rewrite`,
+  `/shorter`, `/longer`, `/translate`, `/brainstorm`, `/review`, `/fix`).
+  The rest act on the app: `/new`, `/incognito`, `/model`, `/think`,
+  `/lookup`, `/style`, `/length`, `/compact`, `/context`, `/retry`, `/rename`,
+  `/pin`, `/share`, `/delete`, `/remember`, `/memory`, `/chats`, `/projects`,
+  `/library`, `/settings`. `/goal` sets what a chat is for, and the model is
+  reminded of it in every reply until it is cleared.
 - **Photos** from the library or the camera can be sent to models that can
   look at them (Qwen3.5 2B and 4B, Qwen3.5 4B Unfiltered, Gemma 4 E2B and
   E4B), marked with a picture in the model list. What such a model
@@ -149,6 +157,7 @@ patch does.
 | `src/lib/app.ts` | The app's state and everything it can do. |
 | `src/lib/engine.ts` | Loading models and generating text through llama.rn. |
 | `src/lib/downloads.ts` | Background model downloads that survive the app closing. |
+| `src/lib/commands.ts` | The slash commands and how each is written out for the model. |
 | `src/lib/logic.ts` | Prompt building, context compaction, titles and memories. |
 | `src/lib/models.ts` | The model catalogue and how well each suits a device. |
 | `src/lib/db.ts` | The SQLite database: chats, messages, projects and memories. |
