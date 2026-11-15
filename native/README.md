@@ -63,7 +63,8 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
 - Whether to think first, a reply **style** (Normal, Concise, Explain, Formal) and reply
   length are set from the "+" in the message box.
 - **Photos** from the library or the camera can be sent to models that can
-  look at them, marked with a picture in the model list. What such a model
+  look at them (Qwen3.5 2B and 4B, Qwen3.5 4B Unfiltered, Gemma 4 E2B and
+  E4B), marked with a picture in the model list. What such a model
   needs for it is downloaded along with the model.
 - **Look up** answers from an offline library instead of the web. The
   passages that fit a question are found on the phone and handed to the model

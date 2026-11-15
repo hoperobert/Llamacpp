@@ -138,6 +138,11 @@ export const MODELS: Model[] = [
     file: 'gemma-4-E4B-it-Q4_0.gguf',
     url: 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_0.gguf',
     group: 'large',
+    vision: {
+      file: 'mmproj-gemma-4-E4B-it-Q8_0.gguf',
+      url: 'https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/main/mmproj-gemma-4-E4B-it-Q8_0.gguf',
+      sizeMB: 560,
+    },
   },
   {
     id: 'qwen35-9b',
@@ -174,6 +179,13 @@ export const MODELS: Model[] = [
     file: 'Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf',
     url: 'https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive/resolve/main/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf',
     group: 'unfiltered',
+    // Sees with the same eyes as Qwen3.5 4B, which it was made from. Kept as its own
+    // file so that deleting one of the two models does not take the other's away.
+    vision: {
+      file: 'mmproj-Qwen3.5-4B-Unfiltered-Q8_0.gguf',
+      url: 'https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF/resolve/main/mmproj-Qwen3.5-4B-Q8_0.gguf',
+      sizeMB: 367,
+    },
   },
   {
     id: 'spark-x26-4b-abliterated',
