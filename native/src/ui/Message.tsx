@@ -55,6 +55,14 @@ export const MessageRow = React.memo(function MessageRow(p: Props) {
               </Text>
             </View>
           )}
+          {!!message.sources?.length && (
+            <View style={styles.sources}>
+              <Icon name="books.vertical" size={13} color={t.c.tertiary} />
+              <Text numberOfLines={1} style={[styles.sourcesText, { color: t.c.tertiary }]}>
+                {message.sources.join(' · ')}
+              </Text>
+            </View>
+          )}
         </Pressable>
       ) : (
         // No press-and-hold menu here: holding a reply selects its text instead.
@@ -180,6 +188,8 @@ const styles = StyleSheet.create({
   wrap: { paddingHorizontal: 16, paddingVertical: 9 },
   divider: { textAlign: 'center', fontSize: 12, marginBottom: 16 },
   userRow: { alignItems: 'flex-end', gap: 6 },
+  sources: { flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: '84%' },
+  sourcesText: { fontSize: 12, flexShrink: 1 },
   photo: { width: 220, height: 220, borderRadius: 20, borderCurve: 'continuous' },
   bubble: {
     maxWidth: '84%', borderRadius: 24, borderCurve: 'continuous',

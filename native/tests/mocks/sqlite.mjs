@@ -10,9 +10,11 @@ export async function openDatabaseAsync(name) {
     async runAsync(sql, ...params) { return db.prepare(sql).run(...flat(params)); },
     async getAllAsync(sql, ...params) { return db.prepare(sql).all(...flat(params)); },
     async getFirstAsync(sql, ...params) { return db.prepare(sql).get(...flat(params)) ?? null; },
+    async closeAsync() {},
     async withTransactionAsync(task) {
       db.exec('BEGIN');
       try { await task(); db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
     },
   };
 }
+export async function deleteDatabaseAsync(name) { files.delete(name); }

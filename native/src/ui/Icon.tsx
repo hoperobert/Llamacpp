@@ -49,6 +49,8 @@ const SYMBOLS = {
   'gearshape': 'settings',
   'plus.circle.fill': 'add_circle',
   'eye.slash': 'visibility_off',
+  'books.vertical': 'library_books',
+  'doc.text': 'description',
   'xmark': 'close',
   'photo': 'image',
   'line.3.horizontal': 'menu',

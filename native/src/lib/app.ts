@@ -19,11 +19,16 @@ import {
 } from './logic';
 import { memoryStore } from './db';
 import { deleteAllImages, deleteImages, keepImage, pickImage } from './images';
+import {
+  addText, libraryFiles, libraryReady, lookup, prepare, removeSource, removeText, restoreLibrary, SOURCES,
+  sourceDownload, sourceForDownload, type LibraryFile, type Source, type SourceState,
+} from './library';
 import { fit, formatMB, modelFromUrl, MODELS, visionAddon, type Model } from './models';
 import {
   blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store,
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
+import { referenceText, worthLookingUp } from './retrieval';
 import { createStore } from './store';
 import { cleanTitle, isBrokenTitle } from './text';
 
@@ -49,6 +54,9 @@ type State = {
   downloaded: Record<string, boolean>;
   downloads: Record<string, DownloadState>;
   customModels: Model[];
+  /** The offline library: each source's state, and the user's own files. */
+  library: Record<string, SourceState>;
+  libraryFiles: LibraryFile[];
   busy: boolean;
   status: string;
   /** The reply being written right now. */
@@ -77,6 +85,8 @@ export const app = createStore<State>({
   downloaded: {},
   downloads: {},
   customModels: [],
+  library: {},
+  libraryFiles: [],
   busy: false,
   status: '',
   live: null,
@@ -90,10 +100,13 @@ export const app = createStore<State>({
 
 export const allModels = () => [...MODELS, ...app.get().customModels];
 /** Everything that can be downloaded: the models, and the photo add-ons some of them have. */
-const allFiles = () => allModels().flatMap((m) => {
-  const addon = visionAddon(m);
-  return addon ? [m, addon] : [m];
-});
+const allFiles = () => [
+  ...allModels().flatMap((m) => {
+    const addon = visionAddon(m);
+    return addon ? [m, addon] : [m];
+  }),
+  ...SOURCES.map(sourceDownload),
+];
 export const findModel = (id: string | null) => allModels().find((m) => m.id === id) ?? null;
 export const findProject = (id?: string) => app.get().projects.find((p) => p.id === id);
 
@@ -200,6 +213,12 @@ export async function start() {
     });
     if (done) {
       const file = allFiles().find((m) => m.id === modelId);
+      const source = sourceForDownload(modelId);
+      if (source) {
+        // A library source has arrived: build its index.
+        prepare(source);
+        return;
+      }
       toast(`${file?.name ?? 'Model'} is ready`);
       haptic('success');
       const model = findModel(modelId);
@@ -214,6 +233,26 @@ export async function start() {
       }
     }
   });
+
+  await restoreLibrary(
+    (id, state) => {
+      const before = app.get().library[id]?.status;
+      app.set((s) => {
+        const library = { ...s.library };
+        if (state) library[id] = state;
+        else delete library[id];
+        return { library };
+      });
+      if (state?.status === 'ready' && before === 'preparing') {
+        toast(`${SOURCES.find((s) => s.id === id)?.name ?? 'Library'} is ready`);
+        haptic('success');
+        // Someone who just added a library wants it used.
+        updateSettings({ lookup: true });
+      }
+    },
+    (source) => !!downloaded[sourceDownload(source).id],
+  );
+  app.set({ libraryFiles: await libraryFiles() });
 
   const preferred = findModel(settings.modelId);
   if (preferred && downloaded[preferred.id] && settings.loadedOnce && !marker) loadWhenOnScreen(preferred);
@@ -576,12 +615,29 @@ export async function send(text: string, photo: string | null = null) {
   // A freshly picked photo is copied into the app's storage. An incognito chat leaves no copy.
   const fresh = !!photo && /^(file|blob|data|https?):/.test(photo);
   const image = photo && fresh && !chat.incognito ? await keepImage(photo) : photo ?? undefined;
+  const found = await lookUp(text, chat);
   await saveChat({
     ...chat,
     title: chat.messages.length ? chat.title : (text || 'Photo').replace(/\s+/g, ' ').slice(0, 48),
-    messages: [...chat.messages, { id: newId(), role: 'user', content: text, image }],
+    messages: [...chat.messages, { id: newId(), role: 'user', content: text, image, ...found }],
   });
   runTurn(text);
+}
+
+/**
+ * Looks a question up in the offline library, when that is switched on.
+ * Returns what to keep with the message: the passages for the model, and their titles to show.
+ */
+async function lookUp(text: string, chat: Chat): Promise<{ context?: string; sources?: string[] }> {
+  if (!app.get().settings.lookup || !libraryReady() || !worthLookingUp(text)) return {};
+  // A short follow-up ("how tall is it?") only makes sense with the question before it.
+  const previous = [...chat.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  const question = text.split(/\s+/).length < 6 && previous ? `${previous} ${text}` : text;
+  app.set({ status: 'Looking it up…' });
+  const passages = await lookup(question).catch(() => []);
+  app.set({ status: '' });
+  if (!passages.length) return {};
+  return { context: referenceText(passages), sources: [...new Set(passages.map((p) => p.title))] };
 }
 
 /** Lets the user pick a photo to send with their next message. */
@@ -714,6 +770,48 @@ export async function summariseNow() {
     if (next) await saveChat(next);
   });
   app.set({ busy: false, status: '' });
+}
+
+// ---------- the offline library ----------
+
+/** Downloads a library source. Its index is built when it arrives. */
+export const installSource = (source: Source) => download(sourceDownload(source));
+
+export function deleteSource(source: Source) {
+  Alert.alert(`Remove ${source.name}?`, 'It will be deleted from this iPhone.', [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Remove', style: 'destructive',
+      onPress: async () => {
+        const file = sourceDownload(source);
+        await deleteModel(file);
+        app.set((s) => {
+          const downloaded = { ...s.downloaded };
+          delete downloaded[file.id];
+          return { downloaded };
+        });
+        await removeSource(source);
+      },
+    },
+  ]);
+}
+
+/** Adds a text file to the library. Returns an error to show, or null. */
+export async function addLibraryFile(name: string, text: string): Promise<string | null> {
+  if (!text.trim()) return 'That file has no text in it.';
+  try {
+    app.set({ libraryFiles: await addText(name, text) });
+    // Adding something to look things up in turns looking up on.
+    if (!app.get().settings.lookup) changeSettings({ lookup: true });
+    haptic('success');
+    return null;
+  } catch (e) {
+    return `Could not add that file. ${String((e as Error)?.message ?? e)}`;
+  }
+}
+
+export async function deleteLibraryFile(name: string) {
+  app.set({ libraryFiles: await removeText(name) });
 }
 
 // ---------- projects ----------

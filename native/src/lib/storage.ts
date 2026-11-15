@@ -11,6 +11,10 @@ export type Message = {
   content: string;
   /** A photo sent with the message: a name inside the app's storage. */
   image?: string;
+  /** Passages from the offline library that were given to the model with this message. */
+  context?: string;
+  /** The titles of what was looked up, to show under the message. */
+  sources?: string[];
   reasoning?: string;
   /** Seconds spent thinking before the answer started. */
   thought?: number;
@@ -64,6 +68,8 @@ export type Settings = {
   maxTokens: number;
   nCtx: number;
   thinking: boolean;
+  /** Look things up in the offline library before answering. */
+  lookup: boolean;
   memoryOn: boolean;
   autoMemory: boolean;
   autoSummary: boolean;
@@ -85,6 +91,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxTokens: 768,
   nCtx: 4096,
   thinking: false,
+  lookup: false,
   memoryOn: true,
   autoMemory: true,
   autoSummary: true,

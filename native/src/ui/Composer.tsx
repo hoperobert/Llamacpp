@@ -35,7 +35,8 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   const thinking = app.use((s) => s.settings.thinking);
   const styleId = app.use((s) => s.settings.style);
   // What is switched on, shown quietly next to the model's name.
-  const extras = [thinking ? 'Think' : '', styleId !== 'normal' ? STYLES.find((s) => s.id === styleId)?.label : '']
+  const lookingUp = app.use((s) => s.settings.lookup && (s.libraryFiles.length > 0 || Object.values(s.library).some((l) => l.status === 'ready')));
+  const extras = [thinking ? 'Think' : '', lookingUp ? 'Look up' : '', styleId !== 'normal' ? STYLES.find((s) => s.id === styleId)?.label : '']
     .filter(Boolean).join(' · ');
 
   const ready = engine.status === 'ready';

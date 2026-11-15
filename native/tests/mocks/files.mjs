@@ -11,6 +11,14 @@ export function writeWhole(name, size, fill) {
   disk.set(name, { size, runs: [{ offset: 0, length: size, fill }] });
 }
 
+/** Puts a real file on the disk, for code that reads what is in it. */
+export function writeBytes(name, bytes) {
+  disk.set(name, { size: bytes.length, runs: [], bytes });
+}
+
+/** Set to a number to make reading fail after that many reads, as if the app had been closed. */
+export const faults = { readsLeft: Infinity };
+
 /** The fill values of a file from start to end, with the length of each stretch. */
 export function layout(name) {
   const file = disk.get(name);
@@ -45,6 +53,12 @@ export class File {
     return {
       offset: 0,
       async readBytes(length) {
+        if (faults.readsLeft-- <= 0) throw new Error('The app was closed');
+        if (file.bytes) {
+          const bytes = file.bytes.subarray(this.offset, this.offset + length);
+          this.offset += bytes.length;
+          return new Uint8Array(bytes);
+        }
         const count = Math.max(0, Math.min(length, file.size - this.offset));
         const fill = file.runs.find((r) => this.offset >= r.offset && this.offset < r.offset + r.length)?.fill ?? 0;
         this.offset += count;

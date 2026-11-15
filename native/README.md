@@ -62,6 +62,10 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   length are set from the "+" in the message box.
 - **Photos** can be sent to models that can look at them (Qwen3.5 2B and 4B,
   Gemma 4 E2B) after a one-off add-on download for that model.
+- **Look up** answers from an offline library instead of the web: Simple
+  English Wikipedia (a 157 MB download, about 500 MB once indexed) and text
+  files of your own. The passages that fit a question are found on the phone
+  and handed to the model with it; their titles show under your message.
 - **Projects** group chats that share instructions.
 - **Incognito chats** are never saved, named or used for memories.
 - **Any message** you sent can be taken back and changed.
@@ -92,7 +96,7 @@ npx expo start --web
 ```
 
 This shows the interface with a stand-in model and pretend downloads
-(`engine.web.ts`, `downloads.web.ts` and `db.web.ts` in `src/lib`). It is for checking
+(the `.web.ts` files in `src/lib`). It is for checking
 layout; system bars, menus and Liquid Glass only appear on an iPhone.
 
 In the preview the app's state and actions are available in the browser
@@ -114,13 +118,15 @@ script and that setting.
 
 | Path | Purpose |
 |---|---|
-| `src/app/` | The screens: chat (`index`), side menu, reply options, models, projects, settings. |
+| `src/app/` | The screens: chat (`index`), side menu, reply options, models, library, projects, settings. |
 | `src/lib/app.ts` | The app's state and everything it can do. |
 | `src/lib/engine.ts` | Loading models and generating text through llama.rn. |
 | `src/lib/downloads.ts` | Background model downloads that survive the app closing. |
 | `src/lib/logic.ts` | Prompt building, context compaction, titles and memories. |
 | `src/lib/models.ts` | The model catalogue and how well each suits a device. |
 | `src/lib/db.ts` | The SQLite database: chats, messages, projects and memories. |
+| `src/lib/library.ts` | The offline library: indexing Wikipedia and your files. |
+| `src/lib/retrieval.ts` | Choosing the passages that fit a question. |
 | `src/lib/images.ts` | Photos attached to messages. |
 | `src/lib/storage.ts` | Settings and other small preferences. |
 | `src/ui/` | Shared pieces: messages, the message box, lists, Markdown, icons. |
@@ -138,4 +144,5 @@ npx expo-doctor
 stand-ins for the phone-only modules (`tests/mocks`). It covers the one-time
 import of older chats and memories, search, projects, and a download whose
 connection drops, whose app is closed or updated part-way, or that is
-interrupted while its pieces are being joined.
+interrupted while its pieces are being joined. It also builds a small library
+index, closes the app half-way through, and checks what is looked up.

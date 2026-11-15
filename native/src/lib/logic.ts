@@ -2,6 +2,7 @@
 
 import * as engine from './engine';
 import { newId, STYLES, type Chat, type Memory, type Project, type Settings } from './storage';
+import { withReferences } from './retrieval';
 import { cleanTitle, withoutThinking } from './text';
 
 export const KEEP_RECENT = 4;        // messages left untouched when a chat is compacted
@@ -45,7 +46,11 @@ export function promptMessages(chat: Chat, settings: Settings, memories: Memory[
   return [
     { role: 'system' as const, content: systemPrompt(chat, settings, memories, project), image: undefined },
     ...chat.messages.slice(chat.cut).filter((m) => m.content || m.image)
-      .map(({ role, content, image }) => ({ role, content, image })),
+      // What was looked up for a message is given to the model with it, every time,
+      // so the conversation it has already read stays the same.
+      .map(({ role, content, image, context }) => ({
+        role, image, content: context ? withReferences(content, context) : content,
+      })),
   ];
 }
 
@@ -53,10 +58,10 @@ export function promptMessages(chat: Chat, settings: Settings, memories: Memory[
 export function usedTokens(chat: Chat, settings: Settings, memories: Memory[], project?: Project): number {
   if (chat.ctx && chat.ctx.cut === chat.cut && chat.ctx.count <= chat.messages.length) {
     const added = chat.messages.slice(chat.ctx.count);
-    return chat.ctx.used + added.reduce((n, m) => n + estimateTokens(m.content), 0);
+    return chat.ctx.used + added.reduce((n, m) => n + estimateTokens(m.content + (m.context ?? '')), 0);
   }
   return estimateTokens(systemPrompt(chat, settings, memories, project)) +
-    chat.messages.slice(chat.cut).reduce((n, m) => n + estimateTokens(m.content), 0);
+    chat.messages.slice(chat.cut).reduce((n, m) => n + estimateTokens(m.content + (m.context ?? '')), 0);
 }
 
 export const replyBudget = (settings: Settings) =>

@@ -10,6 +10,7 @@
     "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.16",
     "expo-device": "~58.0.5",
+    "expo-document-picker": "~58.0.5",
     "expo-file-system": "~58.0.13",
     "expo-font": "~58.0.12",
     "expo-glass-effect": "~58.0.5",
@@ -23,6 +24,7 @@
     "expo-sqlite": "~58.0.17",
     "expo-status-bar": "~58.0.5",
     "expo-symbols": "~58.0.5",
+    "hyparquet": "^1.33.0",
     "llama.rn": "^0.13.0-rc.11",
     "patch-package": "^8.0.1",
     "react": "19.3.0",
@@ -46,7 +48,7 @@
     "typecheck": "tsc --noEmit",
     "postinstall": "patch-package",
     "lint": "expo lint",
-    "test": "node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/text.test.mjs && node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/db.test.mjs && node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/downloads.test.mjs"
+    "test": "node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/text.test.mjs && node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/db.test.mjs && node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/downloads.test.mjs && node --no-warnings --experimental-strip-types --import ./tests/register.mjs tests/library.test.mjs"
   },
   "private": true
 }

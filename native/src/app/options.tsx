@@ -12,12 +12,20 @@ import { useTheme, type Theme } from '../ui/theme';
 
 export default function OptionsSheet() {
   const t = useTheme();
+  const router = useRouter();
   const settings = app.use((s) => s.settings);
+  // There is something to look things up in once a source is ready or a file has been added.
+  const hasLibrary = app.use((s) => s.libraryFiles.length > 0 || Object.values(s.library).some((l) => l.status === 'ready'));
   return (
     <View style={[styles.body, { backgroundColor: t.c.grouped }]}>
       <PhotoRow t={t} />
       <Section t={t}>
         <SwitchRow t={t} title="Think first" value={settings.thinking} onChange={(thinking) => changeSettings({ thinking })} />
+        {hasLibrary ? (
+          <SwitchRow t={t} title="Look up" value={settings.lookup} onChange={(lookup) => changeSettings({ lookup })} />
+        ) : (
+          <Row t={t} title="Look up" value="Add a library" chevron onPress={() => router.replace('/library')} />
+        )}
         <ChoiceRow
           t={t} title="Style" value={settings.style}
           onChange={(style) => changeSettings({ style })}
