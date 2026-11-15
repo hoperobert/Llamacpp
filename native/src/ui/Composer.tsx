@@ -6,7 +6,7 @@ import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, Tex
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { hasNative } from '../../modules/pocket-native';
-import { app, findModel, haptic, runCommand, submit, talk } from '../lib/app';
+import { app, findModel, haptic, needsNoModel, runCommand, submit, talk } from '../lib/app';
 import { parseCommand, suggest, type Command } from '../lib/commands';
 import { imageUri } from '../lib/images';
 import { STYLES } from '../lib/storage';
@@ -53,7 +53,7 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   // A command that acts on the app can be sent with no model loaded.
   const command = parseCommand(draft);
   const acts = !!command && !command.command.prompt;
-  const canSend = busy || (ready && typed) || acts;
+  const canSend = busy || (ready && typed) || acts || (!attachment && !attachedFile && needsNoModel(draft));
   const commands = suggest(draft);
 
   const choose = (chosen: Command) => {

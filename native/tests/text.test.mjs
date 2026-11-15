@@ -278,6 +278,11 @@ for (const question of ['Write a poem about the sea', 'How do vaccines work?', '
 }
 assert.ok(cardText(CARDS[0]).startsWith('Not breathing (CPR)\nSigns: '));
 assert.ok(cardText(CARDS[0]).includes('\n1. Call 999 or 112'));
+// In a chat the steps are given exactly as written.
+const { cardsReply } = await import('../src/lib/firstaid.ts');
+const choking = cardsReply(cardsFor('he is choking'));
+for (const step of CARDS.find((c) => c.id === 'choking').steps) assert.ok(choking.includes(step), step);
+assert.ok(choking.startsWith('**Choking**') && choking.includes('**Never:**') && choking.includes('not written by the model'));
 assert.equal(new Set(CARDS.map((c) => c.id)).size, CARDS.length);
 // Emergency mode changes how replies are written, whatever the usual settings.
 const { inForce, EMERGENCY } = await import('../src/lib/mode.ts');

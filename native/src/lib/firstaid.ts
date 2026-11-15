@@ -1,7 +1,8 @@
 // First aid and survival basics that are part of the app itself: they open
-// with no model loaded, no library and no signal. They are also handed to the
-// model when a question is plainly about one of them, so that its answer rests
-// on these steps and not on what a small model half remembers.
+// with no model loaded, no library and no signal. A question that is plainly
+// about one of them is answered with the steps themselves, word for word. A
+// small model asked to put them in its own words muddles them, and this is no
+// place for that.
 //
 // They follow the common ground of the main first aid bodies (St John
 // Ambulance, the Red Cross, the NHS, the American Heart Association). They are
@@ -24,6 +25,8 @@ export type Card = {
 };
 
 export const CALL = 'Call 999 or 112 (911 in North America)';
+/** The same, for the middle of a sentence. */
+const CALL_MID = 'call 999 or 112 (911 in North America)';
 
 export const CARDS: Card[] = [
   {
@@ -60,7 +63,7 @@ export const CARDS: Card[] = [
       'If they can cough, tell them to keep coughing. Do nothing else yet.',
       'If they cannot: stand behind and to one side, lean them forward, and give up to 5 sharp blows between the shoulder blades with the heel of your hand.',
       'Still stuck: stand behind them, put a fist just above their belly button, hold it with your other hand, and pull sharply in and up. Up to 5 times.',
-      `Still stuck: ${CALL.toLowerCase()}, and keep going with 5 back blows, then 5 pulls.`,
+      `Still stuck: ${CALL_MID}, and keep going with 5 back blows, then 5 pulls.`,
       'If they go limp and stop responding, lay them down and start CPR.',
     ],
     never: [
@@ -112,7 +115,7 @@ export const CARDS: Card[] = [
     id: 'stroke', group: 'first aid', title: 'Stroke',
     signs: 'Face: one side droops, they cannot smile evenly. Arms: they cannot hold both arms up. Speech: slurred or muddled.',
     steps: [
-      `Any one of those signs: ${CALL.toLowerCase()} straight away. Minutes matter.`,
+      `Any one of those signs: ${CALL_MID} straight away. Minutes matter.`,
       'Note the time the signs started and tell the crew.',
       'Keep them still and comfortable, lying with head and shoulders slightly raised.',
       'If they stop responding but are breathing, put them in the recovery position.',
@@ -285,6 +288,17 @@ export function cardText(card: Card): string {
     ...card.steps.map((step, i) => `${i + 1}. ${step}`),
     card.never?.length ? `Never: ${card.never.join(' ')}` : '',
   ].filter(Boolean).join('\n');
+}
+
+/** The cards as a reply in a chat: the steps exactly as written, with nothing of a model's in them. */
+export function cardsReply(cards: Card[]): string {
+  const parts = cards.map((card) => [
+    `**${card.title}**`,
+    card.signs ? `*${card.signs}*` : '',
+    card.steps.map((step, i) => `${i + 1}. ${step}`).join('\n'),
+    card.never?.length ? `**Never:** ${card.never.join(' ')}` : '',
+  ].filter(Boolean).join('\n\n'));
+  return `${parts.join('\n\n---\n\n')}\n\n*These steps are from the first aid guide built into the app, not written by the model. Ask if anything is unclear.*`;
 }
 
 /** The cards a question is plainly about, the most specific first. At most two. */

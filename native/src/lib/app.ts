@@ -14,7 +14,7 @@ import * as Updates from 'expo-updates';
 
 import { NOT_ALLOWED, perform, read } from './actions';
 import { describeAction, findAction, findLookup, type Action } from './assistant';
-import { cardsFor, cardText } from './firstaid';
+import { cardsFor, cardsReply } from './firstaid';
 import { asRequest, lastCode, onOrOff, parseCommand, subjectOf, type Command } from './commands';
 import { bestContext, DEFAULT_KV_KB, kvKBPerToken, trainedContext } from './context';
 import { freeDiskMB, ramMB } from './device';
@@ -45,7 +45,7 @@ import {
 import { installPython, pythonReady, removePython } from './python';
 import { runnable, type Runnable } from './runner';
 import {
-  asks, fileText, FIRST_AID, FROM_PHONE, FROM_PHOTO, referenceText, worthLookingUp, worthUsing, type Passage,
+  asks, fileText, FROM_PHONE, FROM_PHOTO, referenceText, worthLookingUp, worthUsing, type Passage,
 } from './retrieval';
 import { describeClose, type Session } from './session';
 import { createStore } from './store';
@@ -1061,12 +1061,21 @@ export async function send(text: string, photo: string | null = null, file: Stat
   } else if (!photo) {
     const cards = typed ? [] : cardsFor(text);
     if (cards.length) {
-      // Plainly a first aid question: the model answers from the app's own steps, not from memory.
-      found = { context: `${FIRST_AID}\n\n${cards.map(cardText).join('\n\n')}`, sources: cards.map((c) => `First aid: ${c.title}`) };
-    } else {
-      // A question that comes with a photo is about the photo, not about the words in it.
-      found = await lookUp(subject, chat);
+      // Plainly a first aid question. It is answered with the app's own steps, word for word and at
+      // once: a small model asked to reword them muddles them, and this needs no model loaded.
+      await saveChat({
+        ...chat, title,
+        messages: [
+          ...chat.messages,
+          { ...asked, sources: cards.map((c) => `First aid: ${c.title}`) },
+          { id: newId(), role: 'assistant', content: cardsReply(cards) },
+        ],
+      });
+      haptic();
+      return;
     }
+    // A question that comes with a photo is about the photo, not about the words in it.
+    found = await lookUp(subject, chat);
   }
   // Reading the phone can mean answering a question from iOS first. The chat may have moved on meanwhile.
   const current = app.get().chat.id === chat.id ? app.get().chat : chat;
@@ -1365,6 +1374,12 @@ export async function pickFile() {
   if (asset) await attachFile(asset.uri, asset.name);
 }
 
+/** True for a message the app answers itself: something to do on the phone, or first aid. No model has to be loaded. */
+export function needsNoModel(text: string): boolean {
+  if (!text.trim() || parseCommand(text)) return false;
+  return (app.get().settings.assistant && !!offerable(text)) || cardsFor(text).length > 0;
+}
+
 /** The send button: sends the draft, queues it, or stops the reply being written. */
 export function submit() {
   const { busy, draft, attachment, attachedFile, engine: state } = app.get();
@@ -1392,8 +1407,7 @@ export function submit() {
     return;
   }
   if (!text && !attachment && !attachedFile) return;
-  // Something to do on the phone needs no model.
-  const forThePhone = !attachment && !attachedFile && app.get().settings.assistant && !!offerable(text);
+  const forThePhone = !attachment && !attachedFile && needsNoModel(text);
   if (state.status !== 'ready' && !forThePhone) return;
   haptic();
   app.set({ draft: '', attachment: null, attachedFile: null });

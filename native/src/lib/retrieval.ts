@@ -331,9 +331,6 @@ export function referenceText(
 /** The first line of something read from the phone itself (the calendar, say), not from the library. */
 export const FROM_PHONE = 'Read from this iPhone just now, with the user\'s permission.';
 
-/** The first line of first aid steps that are part of the app, given for a question that is plainly about them. */
-export const FIRST_AID = 'First aid steps from the app\'s own guide:';
-
 /** The first line of a file the user attached to a message. Its name follows on the same line. */
 export const FROM_FILE = 'A file the user attached:';
 /** The first line of the text read out of a photo, for a model that cannot look at photos. */
@@ -349,12 +346,6 @@ export function fileText(name: string, text: string, maxChars: number): { contex
 
 /** A question with reference material in front of it, as the model is given it. */
 export function withReferences(question: string, references: string): string {
-  if (references.startsWith(FIRST_AID)) {
-    return (
-      `${references}\n\nThese steps are correct. Answer with them, in this order, in plain short sentences, fitted to what the ` +
-      `user says is happening. Do not add steps of your own or leave out the call for help.\n\nQuestion: ${question}`
-    );
-  }
   if (references.startsWith(FROM_FILE)) {
     return `${references}\n\nThat is the whole of what the user attached. Work from it.\n\n${question || 'Summarise this file.'}`;
   }
