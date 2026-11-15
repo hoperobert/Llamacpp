@@ -135,17 +135,23 @@ quiet: a paper-like palette with a blue accent.
   they wait until the chat is left, so the next reply does not have to re-read
   the whole conversation.
 
-## The keyboard
+## The grey chat, and the keyboard
 
-The chat makes room for the keyboard by hand (`src/ui/keyboard.ts`) rather
-than with React Native's `KeyboardAvoidingView`. That component animates the
-whole layout, and when the screen was also being redrawn (a reply being
-written) a strip of the fade behind the header was left stretched over the
-chat, dimming it. Here one number is animated and the layout follows it, and
-the fade has a fixed height that nothing inside it can grow past.
+On iOS 26 the whole chat used to go grey once a reply was long enough to reach
+the header, which on a phone is usually when the keyboard is up. The cause was
+found in the simulator by having the debugger write out the system's list of
+views: iOS 26 dims a list where it passes under a bar, and the message list is
+drawn upside down so that it grows from the bottom. iOS then gets the place
+wrong and lays its dimming, 85% dark, over the whole list.
 
-That did not stop it, so on iOS 26 the fade is not drawn at all; the system
-softens what scrolls under the header there by itself.
+The chat no longer runs under the header, so there is nothing for iOS to dim.
+(Drawing the list the right way up also cures it. Switching the effect off
+through the navigation library, hiding the app's own fade and removing the
+glass did not.)
+
+Separately, the chat makes room for the keyboard by hand (`src/ui/keyboard.ts`)
+rather than with React Native's `KeyboardAvoidingView`, which animates the
+whole layout while the screen is being redrawn for a reply.
 
 ## Context size
 

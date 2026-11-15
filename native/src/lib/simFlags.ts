@@ -5,7 +5,14 @@
 export type SimFlags = {
   /** The system's dimming of a list where it runs under a bar. */
   edges: 'default' | 'hidden';
-  /** Whether the chat runs under the header. */
+  /**
+   * Whether the chat runs under the header. It does not: iOS 26 dims a list
+   * where it passes under a bar, and because the message list is drawn upside
+   * down (so that it grows from the bottom) it gets the place wrong and dims
+   * the whole list, 85% dark, as soon as a reply is long enough to reach the
+   * header. Seen in the system's own list of views in the simulator, where a
+   * header the chat does not run under was one of two things that cured it.
+   */
   transparentHeader: boolean;
   /** Whether the message list is drawn upside down, so that it grows from the bottom. */
   inverted: boolean;
@@ -22,6 +29,6 @@ export type SimFlags = {
 };
 
 export const DEFAULT_FLAGS: SimFlags = {
-  edges: 'default', transparentHeader: true, inverted: true, glass: true,
+  edges: 'default', transparentHeader: false, inverted: true, glass: true,
   header: true, overlays: true, composer: true, plainInsets: false,
 };

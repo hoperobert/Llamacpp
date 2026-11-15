@@ -30,7 +30,7 @@ export default function RootLayout() {
     <ThemeProvider value={theme}>
       <StatusBar style={t.c.dark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerTintColor: t.c.text, headerShadowVisible: false }}>
-        <Stack.Screen name="index" options={{ title: '', headerTransparent: true }} />
+        <Stack.Screen name="index" options={{ title: '' }} />
         <Stack.Screen
           name="chats"
           options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}

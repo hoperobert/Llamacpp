@@ -14,7 +14,7 @@ import { usedTokens } from '../lib/logic';
 import { recommended } from '../lib/models';
 import type { Message } from '../lib/storage';
 import { Composer } from '../ui/Composer';
-import { Glass, hasGlass } from '../ui/Glass';
+import { Glass } from '../ui/Glass';
 import { Icon, type IconName } from '../ui/Icon';
 import { MessageRow } from '../ui/Message';
 import { ModelRow } from '../ui/ModelRow';
@@ -135,8 +135,8 @@ export default function ChatScreen() {
         {flags.composer && <Composer t={t} onHeight={setComposerHeight} />}
         </View>
       </Animated.View>
-      {/* On iOS 26 the system softens what scrolls under the header by itself. This is for everything else. */}
-      {!hasGlass && <TopFade t={t} height={headerHeight} />}
+      {/* Softens the line where messages pass out of sight under the header. */}
+      <TopFade t={t} height={top} />
       <Header />
     </View>
   );
@@ -179,13 +179,9 @@ const FADE_STEPS = [0.94, 0.86, 0.72, 0.54, 0.34, 0.16];
 const FADE_STEP = 4;
 
 /**
- * A soft backdrop behind the header, so messages scrolling under it never
- * collide with the title. It is solid at the top and fades out below.
- *
- * Not used on iOS 26, where the system does this itself. There, one strip of
- * this fade was repeatedly drawn far taller than it is, dimming the whole chat
- * whenever the keyboard was up. Why was never found; three attempts to stop it
- * failed, so on that system the fade is simply not there.
+ * A short fade at the top of the chat, so messages do not end in a hard line
+ * where they pass out of sight under the header. Where the chat runs under the
+ * header (it does not, see simFlags.ts) it is also a backdrop for the header.
  */
 function TopFade({ t, height }: { t: Theme; height: number }) {
   const solid = Math.min(170, Math.max(0, height - 6));
