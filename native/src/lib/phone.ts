@@ -9,6 +9,10 @@ import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
 import { alarm, screenBrightness, torch } from '../../modules/pocket-native';
 
+/** Gives up on something that has not answered in time, with null. A fix indoors can take for ever. */
+const within = <T>(ms: number, job: Promise<T>): Promise<T | null> =>
+  Promise.race([job, new Promise<null>((resolve) => setTimeout(() => resolve(null), ms))]);
+
 export type Place = { latitude: number; longitude: number; accuracy: number | null; altitude: number | null; at: number };
 
 /** Where the phone is, from GPS. Null if iOS has not allowed it or no fix could be had. */
@@ -16,8 +20,8 @@ export async function whereAmI(): Promise<Place | null> {
   try {
     const allowed = await Location.requestForegroundPermissionsAsync();
     if (!allowed.granted) return null;
-    const found = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
-      .catch(() => Location.getLastKnownPositionAsync());
+    const found = (await within(20000, Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }).catch(() => null)))
+      ?? (await Location.getLastKnownPositionAsync().catch(() => null));
     if (!found) return null;
     const { latitude, longitude, accuracy, altitude } = found.coords;
     return { latitude, longitude, accuracy: accuracy ?? null, altitude: altitude ?? null, at: found.timestamp };
@@ -31,7 +35,8 @@ export async function heading(): Promise<number | null> {
   try {
     const allowed = await Location.requestForegroundPermissionsAsync();
     if (!allowed.granted) return null;
-    const found = await Location.getHeadingAsync();
+    const found = await within(4000, Location.getHeadingAsync());
+    if (!found) return null;
     const degrees = found.trueHeading >= 0 ? found.trueHeading : found.magHeading;
     return degrees >= 0 ? degrees : null;
   } catch {

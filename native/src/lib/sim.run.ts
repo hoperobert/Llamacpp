@@ -22,7 +22,7 @@ import {
 import { COMMANDS } from './commands';
 import { engineVersion, usesGPU } from './engine';
 import { neverAskToNotify } from './notify';
-import { alarm, battery, heading, screenBrightness, torch } from './phone';
+import { alarm, battery, screenBrightness, torch, whereAmI } from './phone';
 import { pythonReady } from './python';
 import { PYTHON_FILES } from './runner';
 import { MODELS } from './models';
@@ -130,6 +130,86 @@ export async function variants() {
   flags.set(DEFAULT_FLAGS);
 }
 
+/**
+ * What was added last: running code, tools, the phone's own functions and
+ * Python. Tried first, so that a run cut short still gets to them.
+ */
+async function newThings() {
+  // ---------- running code a model wrote ----------
+  runCode('js', 'console.log("six times seven is", 6 * 7);\nawait new Promise((r) => setTimeout(r, 500));\nreturn [1, 2, 3].map((n) => n * n);');
+  step('run screen open: a script that prints 42 and returns [1,4,9]');
+  await wait(12000);
+  router.back();
+  await wait(1200);
+  runCode('js', 'console.log("before");\nnotDefined();');
+  step('run screen open: a script that fails');
+  await wait(4000);
+  router.back();
+  await wait(1200);
+  runCode('html', '<!doctype html><html><body style="font-family:system-ui;padding:24px"><h1>Hello from a page</h1><p id="p">Script has not run</p><img src="https://example.com/a.png"><script>document.getElementById("p").textContent = "Script ran"; console.log("page ready");</script></body></html>');
+  step('run screen open: a page');
+  await wait(5000);
+  router.back();
+  await wait(1200);
+
+  // ---------- a tool that is kept, and keeps what it stores ----------
+  runCode('html', '<!doctype html><html><body style="font-family:system-ui;padding:24px"><h1>Counter</h1><p id="p"></p><script>var n = Number(localStorage.getItem("n") || 0) + 1; localStorage.setItem("n", n); document.getElementById("p").textContent = "Opened " + n + " times"; console.log("opened", n);</script></body></html>');
+  await wait(5000);
+  const kept = saveTool('Counter');
+  step(`tool saved: ${kept?.name} ${JSON.stringify(app.get().tools.map((x) => [x.name, x.kind, x.data]))}`);
+  router.back();
+  await wait(1200);
+  for (const time of ['first', 'second']) {
+    if (kept) openTool(kept.id);
+    await wait(5000);
+    step(`tool opened the ${time} time: stored ${JSON.stringify(app.get().tools[0]?.data)}`);
+    router.back();
+    await wait(1200);
+  }
+  router.push('/tools');
+  step('tools open');
+  await wait(2500);
+  router.back();
+  await wait(1200);
+
+  // ---------- what the phone can do with no signal ----------
+  step(`torch: ${await torch(1)} then off: ${await torch(0)}. brightness: ${await screenBrightness(-1)}. battery: ${JSON.stringify(await battery())}`);
+  step(`where: ${JSON.stringify(await whereAmI())}`);
+  step(`alarm on: ${await alarm(true)}`);
+  await wait(1500);
+  step(`alarm off: ${await alarm(false)}`);
+  router.push('/emergency');
+  step('emergency open');
+  await wait(4000);
+  router.back();
+  await wait(1200);
+
+  // ---------- Python ----------
+  step(`python at first: ${app.get().python.status}`);
+  await getPython();
+  step(`python after its download: ${JSON.stringify(app.get().python)} whole: ${pythonReady()}`);
+  if (!pythonReady()) {
+    // The download did not work here. The files were also put beside the app, to try the rest with.
+    try {
+      new Directory(Paths.document, 'python').create({ idempotent: true, intermediates: true });
+      for (const { name } of PYTHON_FILES) {
+        const to = new File(Paths.document, `python/${name}`);
+        if (to.exists) to.delete();
+        new File(Paths.document, `spare-python/${name}`).copy(to);
+      }
+    } catch (error) {
+      step(`python spare copy failed: ${String(error)}`);
+    }
+    app.set({ python: { status: pythonReady() ? 'ready' : 'missing', fraction: 1 } });
+    step(`python from the spare copy: ${app.get().python.status}`);
+  }
+  runCode('python', 'import math, json\nprint("pi is", round(math.pi, 4))\nprint(json.dumps({"squares": [n * n for n in range(5)]}))\n1 / 0');
+  step('run screen open: python that prints, then divides by zero');
+  await wait(30000);
+  router.back();
+  await wait(1200);
+}
+
 async function scenario() {
   await until(() => app.get().hydrated);
   step(`started with the ${REAL ? 'real engine' : 'stand-in engine'}. ${app.get().lastClose || 'first launch'}. ${state()}`);
@@ -165,6 +245,8 @@ async function scenario() {
   }
   step(`model ${state()}`);
   await wait(2500);
+
+  await newThings();
 
   // ---------- the keyboard ----------
   keyboard(true);
@@ -297,80 +379,11 @@ async function scenario() {
   keyboard(false);
   await wait(1000);
 
-  // ---------- running code a model wrote ----------
-  runCode('js', 'console.log("six times seven is", 6 * 7);\nawait new Promise((r) => setTimeout(r, 500));\nreturn [1, 2, 3].map((n) => n * n);');
-  step('run screen open: a script that prints 42 and returns [1,4,9]');
-  await wait(12000);
-  router.back();
-  await wait(1200);
-  runCode('js', 'console.log("before");\nnotDefined();');
-  step('run screen open: a script that fails');
-  await wait(4000);
-  router.back();
-  await wait(1200);
-  runCode('html', '<!doctype html><html><body style="font-family:system-ui;padding:24px"><h1>Hello from a page</h1><p id="p">Script has not run</p><img src="https://example.com/a.png"><script>document.getElementById("p").textContent = "Script ran"; console.log("page ready");</script></body></html>');
-  step('run screen open: a page');
-  await wait(5000);
-  router.back();
-  await wait(1200);
-
-  // ---------- a tool that is kept, and keeps what it stores ----------
-  runCode('html', '<!doctype html><html><body style="font-family:system-ui;padding:24px"><h1>Counter</h1><p id="p"></p><script>var n = Number(localStorage.getItem("n") || 0) + 1; localStorage.setItem("n", n); document.getElementById("p").textContent = "Opened " + n + " times"; console.log("opened", n);</script></body></html>');
-  await wait(5000);
-  const kept = saveTool('Counter');
-  step(`tool saved: ${kept?.name} ${JSON.stringify(app.get().tools.map((x) => [x.name, x.kind, x.data]))}`);
-  router.back();
-  await wait(1200);
-  for (const time of ['first', 'second']) {
-    if (kept) openTool(kept.id);
-    await wait(5000);
-    step(`tool opened the ${time} time: stored ${JSON.stringify(app.get().tools[0]?.data)}`);
-    router.back();
-    await wait(1200);
-  }
-  router.push('/tools');
-  step('tools open');
-  await wait(2500);
-  router.back();
-  await wait(1200);
-
-  // ---------- what the phone can do with no signal ----------
-  step(`torch: ${await torch(1)} then off: ${await torch(0)}. brightness: ${await screenBrightness(-1)}. battery: ${JSON.stringify(await battery())}. heading: ${await heading()}`);
-  step(`alarm on: ${await alarm(true)}`);
-  await wait(1500);
-  step(`alarm off: ${await alarm(false)}`);
-  router.push('/emergency');
-  step('emergency open');
-  await wait(4000);
-  router.back();
-  await wait(1200);
-
-  // ---------- Python ----------
-  step(`python at first: ${app.get().python.status}`);
-  await getPython();
-  step(`python after its download: ${JSON.stringify(app.get().python)} whole: ${pythonReady()}`);
-  if (!pythonReady()) {
-    // The download did not work here. The files were also put beside the app, to try the rest with.
-    try {
-      new Directory(Paths.document, 'python').create({ idempotent: true, intermediates: true });
-      for (const { name } of PYTHON_FILES) {
-        const to = new File(Paths.document, `python/${name}`);
-        if (to.exists) to.delete();
-        new File(Paths.document, `spare-python/${name}`).copy(to);
-      }
-    } catch (error) {
-      step(`python spare copy failed: ${String(error)}`);
-    }
-    app.set({ python: { status: pythonReady() ? 'ready' : 'missing', fraction: 1 } });
-    step(`python from the spare copy: ${app.get().python.status}`);
-  }
-  runCode('python', 'import math, json\nprint("pi is", round(math.pi, 4))\nprint(json.dumps({"squares": [n * n for n in range(5)]}))\n1 / 0');
-  step('run screen open: python that prints, then divides by zero');
-  await wait(30000);
-  router.back();
-  await wait(1200);
   step(`finished ${state()}`);
 }
+
+/** The script runs once, however many times the app's first screen is built. */
+let running = false;
 
 export function runSim() {
   // Earlier launches stay in the file, so an app that closed shows as a second "started".
@@ -381,7 +394,8 @@ export function runSim() {
   }
   // With the stand-in, replies last long enough to do things while they are being written.
   if (!REAL) (globalThis as { pocketPace?: number }).pocketPace = 2;
-  if (written.includes(' finished ')) return;
+  if (written.includes(' finished ') || running) return;
+  running = true;
   // Nobody is there to answer the question about notifications, and it would cover the app.
   neverAskToNotify();
   scenario().catch((error) => step(`SCRIPT ERROR ${String((error as Error)?.stack ?? error).slice(0, 400)}`));

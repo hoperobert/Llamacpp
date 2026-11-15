@@ -134,6 +134,9 @@ jobs:
           process="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Info.plist")"
           mkdir -p shots
           xcrun simctl install "$DEVICE" "$app"
+          # Nobody is there to answer when iOS asks whether the app may know where it is.
+          xcrun simctl privacy "$DEVICE" grant location "$bundle" || true
+          xcrun simctl location "$DEVICE" set 51.5353,-0.1257 || true
           data="$(xcrun simctl get_app_container "$DEVICE" "$bundle" data)"
           if [ "$POCKET_SIM" = real ]; then
             mkdir -p "$data/Documents"
