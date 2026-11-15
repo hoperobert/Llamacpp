@@ -97,6 +97,19 @@ export const COMMANDS: Command[] = [
     prompt: { with: after('Correct the spelling, grammar and punctuation of the following. Change nothing else. Reply with the corrected text only.') },
   },
 
+  // ---------- on this iPhone ----------
+  { name: 'remind', aliases: ['reminder'], hint: 'Set a reminder', takes: 'what, and when' },
+  { name: 'timer', hint: 'Start a timer', takes: 'how long' },
+  { name: 'event', aliases: ['calendar'], hint: 'Add to your calendar', takes: 'what, and when' },
+  { name: 'text', aliases: ['message', 'sms'], hint: 'Start a message', takes: 'a name, then the message' },
+  { name: 'email', hint: 'Start an email', takes: 'a name, then what to say' },
+  { name: 'call', hint: 'Call someone', takes: 'a name' },
+  { name: 'directions', aliases: ['maps', 'navigate'], hint: 'Directions in Maps', takes: 'a place' },
+  { name: 'run', hint: 'Run the code in the last reply' },
+  { name: 'voice', aliases: ['speak', 'talk'], hint: 'Speak, and hear the reply' },
+  { name: 'file', aliases: ['attach'], hint: 'Attach a file' },
+  { name: 'photo', hint: 'Attach a photo' },
+
   // ---------- this chat ----------
   { name: 'new', aliases: ['clear'], hint: 'Start a new chat' },
   { name: 'incognito', hint: 'Start a chat that is not saved' },
@@ -161,6 +174,31 @@ export function expandCommand(content: string): string {
 export function subjectOf(content: string): string {
   const parsed = parseCommand(content);
   return parsed?.command.prompt && parsed.arg ? parsed.arg : content;
+}
+
+/**
+ * A command for doing something on the phone, as the plain request it stands
+ * for: "/timer 10 minutes" is "Set a timer for 10 minutes". Null for any other command.
+ */
+export function asRequest(name: string, arg: string): string | null {
+  const said = arg.trim();
+  switch (name) {
+    case 'remind': return `Remind me ${/^(?:to|about|in|at|on|that|tomorrow|today|tonight)\b/i.test(said) ? '' : 'to '}${said}`;
+    case 'timer': return `Set a timer for ${said.replace(/^for\s+/i, '')}`;
+    case 'event': return `Add ${said} to my calendar`;
+    case 'text': return `Text ${said}`;
+    case 'email': return `Email ${said}`;
+    case 'call': return `Call ${said}`;
+    case 'directions': return `Directions to ${said.replace(/^to\s+/i, '')}`;
+    default: return null;
+  }
+}
+
+/** The last block of code in a reply that names its language, for /run. */
+export function lastCode(reply: string): { lang: string; code: string } | null {
+  const blocks = [...reply.matchAll(/```[ \t]*([\w+#.-]*)[ \t]*\n([\s\S]*?)\n[ \t]*```/g)];
+  const block = blocks.at(-1);
+  return block ? { lang: block[1], code: block[2] } : null;
 }
 
 /** Reads "on", "off" or nothing (which flips it). Null when it is none of those. */

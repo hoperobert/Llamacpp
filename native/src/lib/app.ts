@@ -14,7 +14,7 @@ import * as Updates from 'expo-updates';
 
 import { NOT_ALLOWED, perform, read } from './actions';
 import { describeAction, findAction, findLookup, type Action } from './assistant';
-import { onOrOff, parseCommand, subjectOf, type Command } from './commands';
+import { asRequest, lastCode, onOrOff, parseCommand, subjectOf, type Command } from './commands';
 import { bestContext, DEFAULT_KV_KB, kvKBPerToken, trainedContext } from './context';
 import { freeDiskMB, ramMB } from './device';
 import {
@@ -1449,6 +1449,33 @@ export function runCommand(command: Command, arg: string) {
     case 'settings': router.push('/settings'); break;
     // Typing a slash is what lists the commands.
     case 'help': app.set({ draft: '/' }); break;
+    case 'remind': case 'timer': case 'event': case 'text': case 'email': case 'call': case 'directions': {
+      if (!arg) {
+        toast(`Add ${command.takes} after /${command.name}`);
+        break;
+      }
+      const action = findAction(asRequest(command.name, arg) ?? '', Date.now());
+      if (!action) {
+        toast(command.name === 'event' ? 'Say when, such as "on Friday at 7pm"' : command.name === 'timer' ? 'Say how long, such as "10 minutes"' : 'Could not work that out');
+        app.set({ draft: `/${command.name} ${arg}` });
+        break;
+      }
+      saveChat({
+        ...chat,
+        title: hasMessages ? chat.title : arg.replace(/\s+/g, ' ').slice(0, 48),
+        messages: [...chat.messages, { id: newId(), role: 'user', content: `/${command.name} ${arg}` }, offer(action)],
+      });
+      break;
+    }
+    case 'run': {
+      const reply = [...chat.messages].reverse().find((m) => m.role === 'assistant' && !m.action);
+      const code = reply ? lastCode(reply.content) : null;
+      if (!code || !runCode(code.lang, code.code)) toast('No JavaScript or HTML in the last reply to run');
+      break;
+    }
+    case 'voice': talk(); break;
+    case 'file': pickFile(); break;
+    case 'photo': attachPhoto('library'); break;
   }
 }
 

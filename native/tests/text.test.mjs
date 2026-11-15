@@ -67,7 +67,7 @@ assert.equal(parseCommand('/'), null);
 // The list offered while typing.
 assert.equal(suggest('/').length, COMMANDS.length, 'a slash alone lists everything');
 assert.deepEqual(suggest('/pl').map((c) => c.name), ['plan']);
-assert.deepEqual(suggest('/re').map((c) => c.name), ['rewrite', 'review', 'retry', 'rename', 'remember', 'chats']);
+assert.deepEqual(suggest('/re').map((c) => c.name), ['rewrite', 'review', 'remind', 'retry', 'rename', 'remember', 'chats']);
 assert.deepEqual(suggest('/cl').map((c) => c.name), ['new'], 'found by its other name');
 assert.deepEqual(suggest('/plan '), [], 'the list goes once the command is typed');
 assert.deepEqual(suggest('hello'), []);
@@ -229,3 +229,22 @@ assert.ok(withReferences('', `${FROM_PHOTO}\n\nNo parking`).endsWith('What does 
 assert.ok(withReferences('Am I free?', `${FROM_PHONE}\nNo events.`).includes('Do not say you cannot see'));
 assert.ok(withReferences('What is a cell?', 'Source: Wikipedia\nTitle: Cell\n\nA cell is…').includes('offline library'));
 console.log('files: all checks passed');
+
+// ---------- commands for the phone ----------
+const { asRequest, lastCode, parseCommand: parsed } = await import('../src/lib/commands.ts');
+const { findAction: acted } = await import('../src/lib/assistant.ts');
+const clockNow = new Date(2026, 10, 15, 17, 20, 0).getTime();
+const viaCommand = (typed) => { const c = parsed(typed); return acted(asRequest(c.command.name, c.arg), clockNow); };
+assert.deepEqual(viaCommand('/remind call Sam tomorrow at 9'), { kind: 'reminder', title: 'Call Sam', at: new Date(2026, 10, 16, 9, 0).getTime() });
+assert.deepEqual(viaCommand('/remind in 20 minutes to stretch'), { kind: 'reminder', title: 'Stretch', at: clockNow + 20 * 60000 });
+assert.deepEqual(viaCommand('/timer 10 minutes'), { kind: 'timer', title: 'Timer', at: clockNow + 10 * 60000 });
+assert.deepEqual(viaCommand('/timer for 90 seconds'), { kind: 'timer', title: 'Timer', at: clockNow + 90000 });
+assert.deepEqual(viaCommand('/event dinner with Ana on Friday at 7pm'), { kind: 'event', title: 'Dinner with Ana', at: new Date(2026, 10, 20, 19, 0).getTime(), minutes: 60 });
+assert.equal(viaCommand('/event dinner with Ana'), null);                       // no time: asked for one
+assert.deepEqual(viaCommand('/text Mum on my way'), { kind: 'message', to: 'Mum', body: 'On my way' });
+assert.deepEqual(viaCommand('/call Dr Patel'), { kind: 'call', to: 'Dr Patel' });
+assert.deepEqual(viaCommand('/maps Kings Cross'), { kind: 'directions', to: 'Kings Cross' });
+assert.equal(asRequest('plan', 'a trip'), null);
+assert.deepEqual(lastCode('First:\n```js\nconsole.log(1)\n```\nThen:\n```html\n<p>hi</p>\n```\nDone.'), { lang: 'html', code: '<p>hi</p>' });
+assert.equal(lastCode('No code here.'), null);
+console.log('phone commands: all checks passed');
