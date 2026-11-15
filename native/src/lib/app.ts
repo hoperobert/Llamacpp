@@ -498,11 +498,13 @@ async function carryOnInBackground() {
   const { chat, settings, engine: state } = app.get();
   if (moving || allowance === 'none' || !settings.background || state.status !== 'ready' || !engine.usesGPU()) return;
   // A reply about a photo cannot be picked up part-way. It waits for the app to come back.
-  if (state.vision && chat.messages.slice(chat.cut).some((m) => m.image)) return;
+  const possible = !(state.vision && chat.messages.slice(chat.cut).some((m) => m.image));
   moving = true;
-  const moved = await moveEngine(true);
+  const moved = possible && await moveEngine(true);
   moving = false;
   if (moved) resumeIfWaiting();
+  // Nothing more can be done until the app is opened: say so, and stop holding iOS to its time.
+  else if (AppState.currentState !== 'active') timeIsUp();
 }
 
 /** What the app is doing right now, saved as it changes. See session.ts. */
