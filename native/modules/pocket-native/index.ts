@@ -12,6 +12,11 @@ type Native = {
   end(success: boolean): Promise<void>;
   pdfText(uri: string): Promise<string>;
   imageText(uri: string): Promise<string>;
+  torch(level: number): Promise<boolean>;
+  brightness(level: number): Promise<number>;
+  alarm(on: boolean): Promise<boolean>;
+  serve(directory: string): Promise<number>;
+  stopServing(): Promise<void>;
   addListener(event: 'onExpire', listener: () => void): { remove(): void };
 };
 
@@ -37,3 +42,20 @@ export const pdfText = (uri: string) => (native ? native.pdfText(uri).catch(() =
 
 /** The text found in a picture: a page, a sign, a screenshot. Empty if there is none. */
 export const imageText = (uri: string) => (native ? native.imageText(uri).catch(() => '') : Promise.resolve(''));
+
+/** The torch: 0 is off, up to 1 for full. False where there is none. */
+export const torch = (level: number) => (native?.torch ? native.torch(level).catch(() => false) : Promise.resolve(false));
+
+/** Sets how bright the screen is, from 0 to 1, and gives back how bright it was. Below 0 only asks. */
+export const screenBrightness = (level: number) => (native?.brightness ? native.brightness(level).catch(() => -1) : Promise.resolve(-1));
+
+/** A loud tone to be found by. It sounds even with the ringer switched off. */
+export const alarm = (on: boolean) => (native?.alarm ? native.alarm(on).catch(() => false) : Promise.resolve(false));
+
+/** Hands out the files in a folder to the app's own web view. Gives the address to load them from, or null. */
+export const serveFolder = async (directory: string) => {
+  const port = native?.serve ? await native.serve(directory).catch(() => 0) : 0;
+  return port ? `http://127.0.0.1:${port}/` : null;
+};
+
+export const stopServing = () => { native?.stopServing?.().catch(() => {}); };

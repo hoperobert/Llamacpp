@@ -23,3 +23,10 @@ export const onBackgroundExpire = (listener: () => void) => {
 };
 export const pdfText = async (_uri: string) => '';
 export const imageText = async (_uri: string) => '';
+
+// The browser has no torch or alarm. What was asked of them is kept, for checks.
+export const torch = async (level: number) => { calls.push(`torch ${level}`); return true; };
+export const screenBrightness = async (level: number) => { calls.push(`brightness ${level}`); return 0.5; };
+export const alarm = async (on: boolean) => { calls.push(`alarm ${on}`); return true; };
+export const serveFolder = async (_directory: string): Promise<string | null> => null;
+export const stopServing = () => {};

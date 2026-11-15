@@ -38,8 +38,9 @@ import {
 } from '../../modules/pocket-native';
 import {
   blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store, STYLES,
-  type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
+  type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings, type Tool,
 } from './storage';
+import { installPython, pythonReady, removePython } from './python';
 import { runnable, type Runnable } from './runner';
 import {
   asks, fileText, FROM_PHONE, FROM_PHOTO, referenceText, worthLookingUp, worthUsing, type Passage,
@@ -95,8 +96,14 @@ type State = {
   lastError: string;
   toast: string;
   speakingId: string | null;
-  /** The code on the Run screen. */
-  run: { kind: Runnable; lang: string; code: string } | null;
+  /** The code on the Run screen. With `toolId`, it is a saved tool, which keeps what it stores. */
+  run: { kind: Runnable; lang: string; code: string; toolId?: string } | null;
+  /** What the model built that was kept, newest first. */
+  tools: Tool[];
+  /** The tool being changed in this chat, so that the new version can take its place. */
+  changing: string | null;
+  /** Python's runtime: a one-off download, after which Python runs with no internet. */
+  python: { status: 'missing' | 'downloading' | 'ready'; fraction: number; error?: string };
 };
 
 const NO_ENGINE: EngineState = { status: 'none', modelId: null, fraction: 0, error: null, gpu: false, vision: false };
@@ -128,6 +135,9 @@ export const app = createStore<State>({
   toast: '',
   speakingId: null,
   run: null,
+  tools: [],
+  changing: null,
+  python: { status: 'missing', fraction: 0 },
 });
 
 export const allModels = () => [...MODELS, ...app.get().customModels];
@@ -301,6 +311,8 @@ export async function start() {
   // straight into that again; the user can choose what to do.
   if (marker) await store.setLoadMarker(null);
   app.set({ settings, memories, chatList, customModels, projects, crashed: !!marker });
+  store.tools().then((tools) => app.set({ tools })).catch(() => {});
+  if (pythonReady()) app.set({ python: { status: 'ready', fraction: 1 } });
   repairTitles(chatList);
   // If iOS closed the app while it was in the background, carry on where it was left.
   const last = await store.lastOpen();
@@ -1167,6 +1179,102 @@ export function runCode(lang: string, code: string): boolean {
   app.set({ run: { kind, lang, code } });
   router.push('/run');
   return true;
+}
+
+// ---------- Python ----------
+
+/** Fetches Python's runtime. Safe to call again: it carries on from the parts already here. */
+export async function getPython() {
+  if (app.get().python.status === 'downloading') return;
+  app.set({ python: { status: 'downloading', fraction: 0 } });
+  await activateKeepAwakeAsync('python').catch(() => {});
+  try {
+    await installPython((fraction) => app.set({ python: { status: 'downloading', fraction } }));
+    app.set({ python: { status: 'ready', fraction: 1 } });
+    haptic('success');
+  } catch (e) {
+    app.set({ python: { status: 'missing', fraction: 0, error: `Could not fetch Python. ${String((e as Error)?.message ?? e)}` } });
+    haptic('warning');
+  }
+  deactivateKeepAwake('python').catch(() => {});
+}
+
+export function deletePython() {
+  removePython();
+  app.set({ python: { status: 'missing', fraction: 0 } });
+}
+
+// ---------- tools: what the model built that was kept ----------
+
+function saveTools(tools: Tool[]) {
+  app.set({ tools });
+  store.saveTools(tools);
+}
+
+/** Keeps what is on the Run screen as a tool, or as the new version of the one being changed. */
+export function saveTool(name: string, replace?: string): Tool | null {
+  const { run, tools } = app.get();
+  const title = name.trim().slice(0, 60);
+  if (!run || !title) return null;
+  const old = tools.find((t) => t.id === replace);
+  const tool: Tool = {
+    id: old?.id ?? newId(), name: title, kind: run.kind, lang: run.lang, code: run.code,
+    // A new version keeps what the old one had stored.
+    data: old?.data ?? {}, updatedAt: Date.now(),
+  };
+  saveTools([tool, ...tools.filter((t) => t.id !== tool.id)]);
+  app.set({ run: { ...run, toolId: tool.id }, changing: null });
+  haptic('success');
+  toast(old ? `${title} updated` : `${title} saved to Tools`);
+  return tool;
+}
+
+export function openTool(id: string) {
+  const tool = app.get().tools.find((t) => t.id === id);
+  if (!tool) return;
+  haptic();
+  app.set({ run: { kind: tool.kind, lang: tool.lang, code: tool.code, toolId: tool.id } });
+  router.push('/run');
+}
+
+export function renameTool(id: string, name: string) {
+  const title = name.trim().slice(0, 60);
+  if (title) saveTools(app.get().tools.map((t) => (t.id === id ? { ...t, name: title } : t)));
+}
+
+export function deleteTool(id: string) {
+  haptic();
+  saveTools(app.get().tools.filter((t) => t.id !== id));
+}
+
+/** Something a tool stored, kept with the tool. `null` removes it. */
+export function keepToolData(id: string | undefined, key: string, value: string | null) {
+  const { tools } = app.get();
+  const tool = tools.find((t) => t.id === id);
+  if (!tool) return;
+  const data = { ...tool.data };
+  if (value === null) delete data[key];
+  // A tool that stores without end is stopped from filling the phone.
+  else if (JSON.stringify(data).length + value.length < 2_000_000) data[key] = value;
+  saveTools(tools.map((t) => (t.id === id ? { ...t, data } : t)));
+}
+
+/**
+ * Starts a change to a tool: its code goes into the chat as a file, and the
+ * message box waits for what to change. What the model sends back can then
+ * take the tool's place.
+ */
+export function changeTool(id: string) {
+  const tool = app.get().tools.find((t) => t.id === id);
+  if (!tool) return;
+  haptic();
+  const ending = tool.kind === 'page' ? 'html' : tool.kind === 'python' ? 'py' : 'js';
+  app.set({
+    changing: tool.id,
+    attachedFile: { name: `${tool.name}.${ending}`, text: tool.code },
+    draft: `Change this tool and give me the whole new version in one ${tool.lang || ending} block. Change: `,
+  });
+  if (router.canDismiss()) router.dismissAll();
 }
 
 /** Lets the user pick a photo, or take one, to send with their next message. */

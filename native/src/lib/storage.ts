@@ -17,6 +17,18 @@ export type MessageAction = {
   note?: string;
 };
 
+/** Something the model built that was worth keeping: a page or a script, run again whenever it is wanted. */
+export type Tool = {
+  id: string;
+  name: string;
+  kind: 'script' | 'page' | 'python';
+  lang: string;
+  code: string;
+  /** What the tool itself has kept (its localStorage). */
+  data: Record<string, string>;
+  updatedAt: number;
+};
+
 export type Message = {
   id?: string;
   role: 'user' | 'assistant';
@@ -147,6 +159,9 @@ export const store = {
     return { ...DEFAULT_SETTINGS, ...(await read<Partial<Settings>>('settings', {})) };
   },
   saveSettings: (settings: Settings) => write('settings', settings),
+
+  tools: () => read<Tool[]>('tools', []),
+  saveTools: (tools: Tool[]) => write('tools', tools),
 
   customModels: () => read<Model[]>('customModels', []),
   saveCustomModels: (models: Model[]) => write('customModels', models),

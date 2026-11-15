@@ -2,7 +2,7 @@ Pod::Spec.new do |s|
   s.name           = 'PocketNative'
   s.version        = '1.0.0'
   s.summary        = 'The few things Pocket LLM needs from iOS that no package offers.'
-  s.description    = 'Carrying work on in the background, and reading the text of a PDF.'
+  s.description    = 'Carrying work on in the background, reading PDFs and photos, the torch and an alarm, and files for the web view.'
   s.author         = 'Pocket LLM'
   s.homepage       = 'https://github.com/hoperobert/Llamacpp'
   s.license        = 'MIT'

@@ -139,6 +139,13 @@ jobs:
             mkdir -p "$data/Documents"
             cp model/Qwen3.5-0.8B-Q4_0.gguf "$data/Documents/spare-Qwen3.5-0.8B-Q4_0.gguf"
           fi
+          # Python's runtime, in case the app's own download of it does not work in a simulator.
+          version="$(grep -o "PYTHON_VERSION = '[^']*'" src/lib/runner.ts | cut -d"'" -f2)"
+          mkdir -p "$data/Documents/spare-python"
+          for part in pyodide.mjs pyodide.asm.mjs pyodide.asm.wasm python_stdlib.zip pyodide-lock.json; do
+            curl -fsSL "https://cdn.jsdelivr.net/npm/pyodide@$version/$part" -o "$data/Documents/spare-python/$part" || echo "could not fetch $part"
+          done
+          ls -l "$data/Documents/spare-python" || true
           xcrun simctl spawn "$DEVICE" log stream --level info --predicate "process == \"$process\"" > shots/log-full.txt 2>&1 &
           xcrun simctl launch "$DEVICE" "$bundle"
           left=0
