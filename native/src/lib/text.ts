@@ -27,3 +27,26 @@ export function cleanTitle(raw: string): string {
 
 /** True for a saved title that an earlier version let through with tags or a label in it. */
 export const isBrokenTitle = (title: string) => /<\/?think|^(?:chat\s+)?title\s*[:\-–]/i.test(title);
+
+/**
+ * A reply that was stopped before it began leaves two of the user's messages
+ * next to each other. Many models are only taught conversations that take
+ * turns, and some refuse anything else, so neighbours from the same side are
+ * joined into one.
+ */
+export function takingTurns<T extends { role: string; content: string; image?: string }>(messages: T[]): T[] {
+  const out: T[] = [];
+  for (const message of messages) {
+    const before = out.at(-1);
+    if (before && before.role === message.role) {
+      out[out.length - 1] = {
+        ...before,
+        content: [before.content, message.content].filter(Boolean).join('\n\n'),
+        image: message.image ?? before.image,
+      };
+    } else {
+      out.push(message);
+    }
+  }
+  return out;
+}

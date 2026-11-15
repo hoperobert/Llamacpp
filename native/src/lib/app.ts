@@ -401,12 +401,21 @@ function appStateChanged(next: string) {
     const model = loadWhenActive;
     loadWhenActive = null;
     if (model && app.get().engine.status === 'none') loadModel(model);
-    // A message sent just before leaving gets its reply now.
-    const turn = resumeTurn;
-    resumeTurn = null;
-    const { chat, busy } = app.get();
-    if (turn && !busy && chat.id === turn.chatId && chat.messages.at(-1)?.role === 'user') runTurn(turn.userText);
+    resumeIfWaiting();
   }
+}
+
+/**
+ * Writes a reply that could not be written because the app had left the
+ * screen. It waits for the app to be back and for the engine to be free, so it
+ * is tried both when the app returns and when a reply ends.
+ */
+function resumeIfWaiting() {
+  const turn = resumeTurn;
+  const { chat, busy } = app.get();
+  if (!turn || busy || AppState.currentState !== 'active') return;
+  resumeTurn = null;
+  if (chat.id === turn.chatId && chat.messages.at(-1)?.role === 'user') runTurn(turn.userText);
 }
 
 /** How long after leaving the app a relaunch still returns to the chat that was open. */
@@ -690,6 +699,9 @@ async function runTurn(userText: string | null) {
       message.speed = result.timings.speed;
       message.thought = result.timings.thought || undefined;
       if (interrupted) message.stopped = interrupted;
+      // Cut off by leaving the app before a word of the answer was written (it may
+      // still have been thinking). There is nothing to keep, so it is asked again on return.
+      if (interrupted && !stoppedByUser && !message.content) resumeTurn = { chatId, userText };
       if (message.content && onScreen()) {
         const chat = current();
         const messages = [...chat.messages, message];
@@ -724,6 +736,11 @@ async function runTurn(userText: string | null) {
   deactivateKeepAwake('chat').catch(() => {});
   doing('writing a reply', false);
   app.set({ busy: false });
+  if (resumeTurn) {
+    // Cut off by leaving. If the app is already back, start again now; otherwise when it returns.
+    resumeIfWaiting();
+    return;
+  }
   if (!stoppedByUser && !interrupted) haptic('success');
 
   // Side jobs wait if the chat is long. See flushSideJobs.

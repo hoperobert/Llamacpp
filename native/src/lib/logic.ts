@@ -4,7 +4,7 @@ import { expandCommand, subjectOf } from './commands';
 import * as engine from './engine';
 import { newId, STYLES, type Chat, type Memory, type Project, type Settings } from './storage';
 import { withReferences } from './retrieval';
-import { cleanTitle, withoutThinking } from './text';
+import { cleanTitle, takingTurns, withoutThinking } from './text';
 
 export const KEEP_RECENT = 4;        // messages left untouched when a chat is compacted
 const MAX_MEMORIES = 40;
@@ -50,18 +50,20 @@ export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[],
 }
 
 export function promptMessages(chat: Chat, settings: Settings, memories: Memory[], project?: Project) {
+  const turns = chat.messages.slice(chat.cut).filter((m) => m.content || m.image)
+    // What was looked up for a message is given to the model with it, every time,
+    // so the conversation it has already read stays the same.
+    // A request typed as a command ("/plan a trip") is written out in full here.
+    .map(({ role, content, image, context }) => {
+      const said = role === 'user' ? expandCommand(content) : content;
+      return { role, image, content: context ? withReferences(said, context) : said };
+    });
   return [
     { role: 'system' as const, content: systemPrompt(chat, settings, memories, project), image: undefined },
-    ...chat.messages.slice(chat.cut).filter((m) => m.content || m.image)
-      // What was looked up for a message is given to the model with it, every time,
-      // so the conversation it has already read stays the same.
-      // A request typed as a command ("/plan a trip") is written out in full here.
-      .map(({ role, content, image, context }) => {
-        const said = role === 'user' ? expandCommand(content) : content;
-        return { role, image, content: context ? withReferences(said, context) : said };
-      }),
+    ...takingTurns(turns),
   ];
 }
+
 
 /** Tokens the chat occupies. Measured where possible, otherwise estimated. */
 export function usedTokens(chat: Chat, settings: Settings, memories: Memory[], project?: Project): number {

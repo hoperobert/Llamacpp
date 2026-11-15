@@ -150,3 +150,13 @@ assert.equal(bestContext({ fileMB: 500, kvKB: 20, ramMB: 15200, trained: 4096 })
 assert.equal(bestContext({ fileMB: 500, kvKB: 20, ramMB: null }), 8192);
 assert.equal(bestContext({ fileMB: 3000, kvKB: 128, ramMB: null }), 2048, 'an unknown phone is treated as a small one');
 console.log('context: all checks passed');
+
+// ---------- taking turns ----------
+const { takingTurns } = await import('../src/lib/text.ts');
+assert.deepEqual(
+  takingTurns([{ role: 'user', content: 'a' }, { role: 'user', content: 'b' }, { role: 'assistant', content: 'c' }, { role: 'user', content: 'd' }]).map((m) => `${m.role}:${m.content}`),
+  ['user:a\n\nb', 'assistant:c', 'user:d'],
+);
+assert.deepEqual(takingTurns([{ role: 'user', content: '', image: 'a.jpg' }, { role: 'user', content: 'what is this' }]), [{ role: 'user', content: 'what is this', image: 'a.jpg' }]);
+assert.deepEqual(takingTurns([]), []);
+console.log('turns: all checks passed');
