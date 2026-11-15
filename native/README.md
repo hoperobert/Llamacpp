@@ -46,8 +46,11 @@ arrive the next time the app is opened:
 npx eas-cli@latest update --channel production --message "What changed"
 ```
 
-A build only takes updates made for the same native code, so anything that
-adds or changes a native package still needs a build. The bottom of Settings
+A build only takes updates with the same `runtimeVersion` (`app.json`).
+Anything that adds or changes a native package needs a build, and the runtime
+version raised first, so the update that follows cannot reach an older build.
+`npm test` fails if the packages, patches or app configuration have changed
+without that; after raising it, run `npm run runtime:lock`. The bottom of Settings
 shows the build number and, when one is in use, the update.
 
 ### Setting it up from scratch
