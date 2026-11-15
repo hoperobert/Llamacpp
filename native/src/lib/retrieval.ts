@@ -285,8 +285,8 @@ export function referenceText(passages: Passage[], maxChars = 3200): string {
 /** A question with reference material in front of it, as the model is given it. */
 export function withReferences(question: string, references: string): string {
   return (
-    'Reference material from the offline library. Use it if it helps to answer. ' +
-    'If it does not contain the answer, say so or answer from what you know.\n\n' +
+    'Reference material from the offline library. Use it to answer and to check your facts: ' +
+    'where it covers the question, trust it over what you remember. Where it does not, answer from what you know.\n\n' +
     `${references}\n\nQuestion: ${question}`
   );
 }
