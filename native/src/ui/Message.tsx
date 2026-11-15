@@ -3,7 +3,10 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActionSheetIOS, Animated, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { app, copyText, editMessage, regenerate, send, shareText, speak } from '../lib/app';
+import {
+  answerInstead, app, approveAction, cancelAction, copyText, editMessage, regenerate, send, shareText, speak,
+} from '../lib/app';
+import { describeAction } from '../lib/assistant';
 import { imageUri } from '../lib/images';
 import type { Message } from '../lib/storage';
 import { splitThinking } from '../lib/text';
@@ -76,6 +79,7 @@ export const MessageRow = React.memo(function MessageRow(p: Props) {
           )}
         </Pressable>
       ) : (
+        message.action ? <ActionCard t={t} message={message} last={!!p.canRetry} /> :
         // No press-and-hold menu here: holding a reply selects its text instead.
         <View style={styles.assistant}>
           <Thinking t={t} message={message} streaming={!!streaming} />
@@ -103,6 +107,79 @@ export const MessageRow = React.memo(function MessageRow(p: Props) {
     </View>
   );
 });
+
+const ACTION_ICONS: Record<NonNullable<Message['action']>['what']['kind'], IconName> = {
+  reminder: 'bell', timer: 'timer', event: 'calendar', message: 'message', email: 'envelope', call: 'phone', directions: 'map',
+};
+
+/**
+ * An offer to do something on the phone. Nothing is done until it is approved,
+ * and once it has been the card says what happened.
+ */
+function ActionCard({ t, message, last }: { t: Theme; message: Message; last: boolean }) {
+  const offered = message.action!;
+  const [working, setWorking] = useState(false);
+  // Worded as of when it was offered or done: "Tomorrow" stays the day that was meant.
+  const card = useMemo(() => describeAction(offered.what, offered.asked), [offered]);
+  const open = offered.state === 'proposed' || offered.state === 'failed';
+  const approve = async () => {
+    setWorking(true);
+    await approveAction(message.id);
+    setWorking(false);
+  };
+  return (
+    <View style={[styles.card, { backgroundColor: t.c.card, borderColor: t.c.line }]}>
+      <View style={styles.cardTop}>
+        <View style={[styles.cardIcon, { backgroundColor: t.c.fill }]}>
+          <Icon name={ACTION_ICONS[offered.what.kind]} size={18} color={t.c.text} />
+        </View>
+        <View style={styles.flex}>
+          <Text style={[styles.cardTitle, { color: t.c.text }]}>{card.title}</Text>
+          <Text style={[styles.cardDetail, { color: t.c.secondary }]}>{card.detail}</Text>
+        </View>
+      </View>
+      {!!offered.note && (
+        <View style={styles.cardNote}>
+          {offered.state === 'done' && <Icon name="checkmark.circle.fill" size={16} color={t.c.good} />}
+          <Text
+            style={[styles.cardDetail, styles.flex, {
+              color: offered.state === 'done' ? t.c.good : offered.state === 'failed' ? t.c.danger : t.c.tertiary,
+            }]}
+          >
+            {offered.note}
+          </Text>
+        </View>
+      )}
+      {open && (
+        <View style={styles.cardButtons}>
+          <Pressable
+            onPress={approve}
+            disabled={working}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.cardButton, { backgroundColor: t.c.accent }, (pressed || working) && styles.dim]}
+          >
+            <Text style={[styles.cardButtonText, { color: t.c.onAccent }]}>
+              {working ? 'Working…' : offered.state === 'failed' ? 'Try again' : card.approve}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => cancelAction(message.id)}
+            disabled={working}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.cardButton, { backgroundColor: t.c.fill }, pressed && styles.dim]}
+          >
+            <Text style={[styles.cardButtonText, { color: t.c.text }]}>Cancel</Text>
+          </Pressable>
+        </View>
+      )}
+      {open && last && !working && (
+        <Pressable onPress={() => answerInstead(message.id)} hitSlop={8} accessibilityRole="button">
+          <Text style={[styles.cardLink, { color: t.c.secondary }]}>Not what I meant. Just answer.</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
 
 function Actions({ t, message, canRetry }: Props) {
   const id = message.id ?? message.content.slice(0, 24);
@@ -212,6 +289,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 17, paddingVertical: 11,
   },
   assistant: { gap: 10 },
+  flex: { flex: 1 },
+  card: { borderRadius: 22, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, padding: 14, gap: 12 },
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  cardIcon: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontSize: 16, fontWeight: '600' },
+  cardDetail: { fontSize: 14, marginTop: 2 },
+  cardNote: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cardButtons: { flexDirection: 'row', gap: 10 },
+  cardButton: { flex: 1, height: 42, borderRadius: 21, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center' },
+  cardButtonText: { fontSize: 15, fontWeight: '600' },
+  cardLink: { fontSize: 13, textAlign: 'center' },
   note: { fontSize: 13 },
   paused: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   continue: { borderRadius: 100, paddingHorizontal: 14, paddingVertical: 7 },

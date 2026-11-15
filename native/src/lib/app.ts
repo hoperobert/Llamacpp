@@ -10,6 +10,8 @@ import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
 import * as Updates from 'expo-updates';
 
+import { NOT_ALLOWED, perform, read } from './actions';
+import { describeAction, findAction, findLookup, type Action } from './assistant';
 import { onOrOff, parseCommand, subjectOf, type Command } from './commands';
 import { bestContext, DEFAULT_KV_KB, kvKBPerToken, trainedContext } from './context';
 import { freeDiskMB, ramMB } from './device';
@@ -37,7 +39,7 @@ import {
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
 import { runnable, type Runnable } from './runner';
-import { asks, referenceText, worthLookingUp, worthUsing, type Passage } from './retrieval';
+import { asks, FROM_PHONE, referenceText, worthLookingUp, worthUsing, type Passage } from './retrieval';
 import { describeClose, type Session } from './session';
 import { createStore } from './store';
 import { cleanTitle, isBrokenTitle } from './text';
@@ -978,14 +980,99 @@ export async function send(text: string, photo: string | null = null) {
   const image = photo && fresh && !chat.incognito ? await keepImage(photo) : photo ?? undefined;
   // "/plan a trip to Rome" is about a trip to Rome.
   const subject = subjectOf(text);
-  // A question that comes with a photo is about the photo, not about the words in it.
-  const found = photo ? {} : await lookUp(subject, chat);
-  await saveChat({
-    ...chat,
-    title: chat.messages.length ? chat.title : (subject || 'Photo').replace(/\s+/g, ' ').slice(0, 48),
-    messages: [...chat.messages, { id: newId(), role: 'user', content: text, image, ...found }],
-  });
+  const title = chat.messages.length ? chat.title : (subject || 'Photo').replace(/\s+/g, ' ').slice(0, 48);
+  const asked: Message = { id: newId(), role: 'user', content: text, image };
+  // Something to do on the phone ("remind me to…") is offered as a card to approve, not sent to the model.
+  const plain = !photo && !typed && app.get().settings.assistant;
+  const action = plain ? findAction(text, Date.now()) : null;
+  if (action) {
+    await saveChat({ ...chat, title, messages: [...chat.messages, asked, offer(action)] });
+    haptic();
+    return;
+  }
+  // A question about the phone ("what's on my calendar?") is answered from the phone.
+  const phone = plain ? findLookup(text, Date.now()) : null;
+  let found: { context?: string; sources?: string[] } = {};
+  if (phone) {
+    const got = await read(phone);
+    if (!got) {
+      await saveChat({
+        ...chat, title,
+        messages: [...chat.messages, asked, { id: newId(), role: 'assistant', content: NOT_ALLOWED[phone.kind] }],
+      });
+      return;
+    }
+    found = { context: `${FROM_PHONE}\n${got.text}`, sources: [got.from] };
+  } else if (!photo) {
+    // A question that comes with a photo is about the photo, not about the words in it.
+    found = await lookUp(subject, chat);
+  }
+  // Reading the phone can mean answering a question from iOS first. The chat may have moved on meanwhile.
+  const current = app.get().chat.id === chat.id ? app.get().chat : chat;
+  await saveChat({ ...current, title, messages: [...current.messages, { ...asked, ...found }] });
   runTurn(text);
+}
+
+// ---------- doing things on the phone ----------
+
+/** A reply that is an offer to do something, shown as a card to approve. */
+function offer(action: Action): Message {
+  const card = describeAction(action, Date.now());
+  return {
+    id: newId(), role: 'assistant', content: `${card.title}\n${card.detail}`,
+    action: { what: action, state: 'proposed', asked: Date.now() },
+  };
+}
+
+function updateMessage(id: string | undefined, change: (message: Message) => Message) {
+  const { chat } = app.get();
+  if (!id || !chat.messages.some((m) => m.id === id)) return Promise.resolve();
+  return saveChat({ ...chat, messages: chat.messages.map((m) => (m.id === id ? change(m) : m)) });
+}
+
+const acting = new Set<string>();
+
+/** Does what a card offers. Also the way to try again after it failed. */
+export async function approveAction(id: string | undefined) {
+  const message = app.get().chat.messages.find((m) => m.id === id);
+  const offered = message?.action;
+  if (!id || !offered || acting.has(id) || (offered.state !== 'proposed' && offered.state !== 'failed')) return;
+  acting.add(id);
+  haptic();
+  // A timer counts from now, not from when it was asked for.
+  const what: Action = offered.what.kind === 'timer'
+    ? { ...offered.what, at: offered.what.at + (Date.now() - offered.asked) }
+    : offered.what;
+  const outcome = await perform(what);
+  acting.delete(id);
+  const card = describeAction(what, Date.now());
+  await updateMessage(id, (m) => ({
+    ...m,
+    content: `${card.title}\n${card.detail}\n${outcome.note}`,
+    action: { ...offered, what, asked: Date.now(), state: outcome.ok ? 'done' : 'failed', note: outcome.note },
+  }));
+  haptic(outcome.ok ? 'success' : 'warning');
+}
+
+export function cancelAction(id: string | undefined) {
+  haptic();
+  updateMessage(id, (m) => (m.action?.state === 'proposed' || m.action?.state === 'failed'
+    ? { ...m, action: { ...m.action, state: 'cancelled', note: 'Cancelled.' } }
+    : m));
+}
+
+/** The card was not what was wanted: take it away and let the model answer the message instead. */
+export async function answerInstead(id: string | undefined) {
+  const { chat, busy, engine: state } = app.get();
+  const at = chat.messages.findIndex((m) => m.id === id);
+  if (at < 1 || at !== chat.messages.length - 1 || busy) return;
+  if (state.status !== 'ready') {
+    toast('Load a model first');
+    return;
+  }
+  haptic();
+  await saveChat({ ...chat, messages: chat.messages.slice(0, at) });
+  runTurn(chat.messages[at - 1].content);
 }
 
 /**
@@ -1075,7 +1162,10 @@ export function submit() {
     }
     return;
   }
-  if ((!text && !attachment) || state.status !== 'ready') return;
+  if (!text && !attachment) return;
+  // Something to do on the phone needs no model.
+  const forThePhone = !attachment && app.get().settings.assistant && !!findAction(text, Date.now());
+  if (state.status !== 'ready' && !forThePhone) return;
   haptic();
   app.set({ draft: '', attachment: null });
   send(text, attachment);

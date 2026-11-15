@@ -2,9 +2,20 @@
 // key-value storage. Chats and memories are in the database (db.ts).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { Action } from './assistant';
 import { chatStore, projectStore } from './db';
 import type { Model } from './models';
 import type { Session } from './session';
+
+/** Something the app offered to do on the phone, and what became of it. */
+export type MessageAction = {
+  what: Action;
+  state: 'proposed' | 'done' | 'failed' | 'cancelled';
+  /** When it was offered. A timer runs from when it is approved, not from when it was asked for. */
+  asked: number;
+  /** What happened, in a few words. */
+  note?: string;
+};
 
 export type Message = {
   id?: string;
@@ -22,6 +33,8 @@ export type Message = {
   speed?: number;
   /** Set when the reply was cut short, with the reason to show. */
   stopped?: string;
+  /** Set on a reply that is an offer to do something, shown as a card to approve. */
+  action?: MessageAction;
 };
 
 export type Chat = {
@@ -77,6 +90,8 @@ export type Settings = {
   lookup: boolean;
   /** Finish a reply after the app leaves the screen, when iOS allows the time. */
   background: boolean;
+  /** Offer to set reminders, timers and events, start messages and calls, and read the calendar when asked. */
+  assistant: boolean;
   memoryOn: boolean;
   autoMemory: boolean;
   autoSummary: boolean;
@@ -101,6 +116,7 @@ export const DEFAULT_SETTINGS: Settings = {
   thinking: false,
   lookup: false,
   background: true,
+  assistant: true,
   memoryOn: true,
   autoMemory: true,
   autoSummary: true,

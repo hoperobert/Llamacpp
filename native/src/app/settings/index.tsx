@@ -60,6 +60,10 @@ export default function SettingsScreen() {
           />
           <SwitchRow t={t} title="Think first" value={settings.thinking} onChange={(thinking) => changeSettings({ thinking })} />
           <SwitchRow
+            t={t} title="Do things on this iPhone"
+            value={settings.assistant} onChange={(assistant) => changeSettings({ assistant })}
+          />
+          <SwitchRow
             t={t} title="Finish in the background"
             value={settings.background} onChange={(background) => changeSettings({ background })}
           />

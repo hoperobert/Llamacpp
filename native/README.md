@@ -107,6 +107,16 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
 
   Another source is one entry in `src/lib/sources.ts`: a Parquet file with a
   column of titles and a column of text.
+- **It does things on the phone.** "Remind me to call the dentist tomorrow at
+  9", "set a timer for 10 minutes", "add dinner with Ana to my calendar on
+  Friday at 7pm", "text Mum I'm running late", "call Sam", "directions to
+  Kings Cross": each is offered as a card saying exactly what will happen, and
+  nothing happens until it is approved. Reminders, Calendar, Messages, Mail,
+  Phone and Maps do the work, and iOS asks for each permission the first time
+  it is needed. Questions about the phone ("what's on my calendar today?",
+  "what are my reminders?", "where am I?") are answered from the phone. What
+  was asked for, and when, is worked out by rule (`src/lib/assistant.ts`), not
+  by the model: a small model gets dates wrong, and rules cost no time.
 - **Code runs on the phone.** A JavaScript block in a reply has a Run button
   and an HTML one has Preview. The code runs in a web view of its own, shut
   away from the app and its files and with no internet. What it prints, or the
@@ -234,6 +244,9 @@ patch does.
 | `src/lib/library.ts` | The offline library: indexing those downloads and your files. |
 | `src/lib/retrieval.ts` | Choosing the passages that fit a question. |
 | `src/lib/images.ts` | Photos attached to messages. |
+| `src/lib/assistant.ts` | Reading a request to do something on the phone, and the time it names. |
+| `src/lib/actions.ts` | Doing it: Reminders, Calendar, Messages, Mail, Phone, Maps, Contacts, Location. |
+| `src/lib/notify.ts` | Notifications: a reply that finished or paused while the app was away. |
 | `src/lib/runner.ts` | Running code a model wrote: what can be run, and the page that runs it. |
 | `src/lib/storage.ts` | Settings and other small preferences. |
 | `src/ui/` | Shared pieces: messages, the message box, lists, Markdown, icons. |

@@ -57,6 +57,12 @@ const SYMBOLS = {
   'line.3.horizontal': 'menu',
   'folder': 'folder',
   'folder.badge.plus': 'create_new_folder',
+  'bell': 'notifications',
+  'timer': 'timer',
+  'calendar': 'calendar_today',
+  'message': 'sms',
+  'phone': 'call',
+  'map': 'map',
 } as const;
 
 export type IconName = keyof typeof SYMBOLS;

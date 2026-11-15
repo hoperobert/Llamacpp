@@ -5,7 +5,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SQLite from 'expo-sqlite';
-import type { Chat, ChatMeta, Memory, Message, Project } from './storage';
+import type { Chat, ChatMeta, Memory, Message, MessageAction, Project } from './storage';
 
 type Db = SQLite.SQLiteDatabase;
 
@@ -70,6 +70,9 @@ function database(): Promise<Db> {
       await db.execAsync('ALTER TABLE messages ADD COLUMN context TEXT');
       await db.execAsync('ALTER TABLE messages ADD COLUMN sources TEXT');
     }
+    if (!messageColumns.some((c) => c.name === 'action')) {
+      await db.execAsync('ALTER TABLE messages ADD COLUMN action TEXT');
+    }
     await importOlderData(db);
     return db;
   })();
@@ -101,11 +104,12 @@ async function writeChat(db: Db, chat: Chat) {
   for (let i = 0; i < chat.messages.length; i++) {
     const m = chat.messages[i];
     await db.runAsync(
-      `INSERT INTO messages (chat_id, position, id, role, content, reasoning, thought, speed, stopped, image, context, sources)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO messages (chat_id, position, id, role, content, reasoning, thought, speed, stopped, image, context, sources, action)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       chat.id, i, m.id ?? newId(), m.role, m.content, m.reasoning ?? null, m.thought ?? null,
       m.speed ?? null, m.stopped ?? null, m.image ?? null, m.context ?? null,
       m.sources?.length ? JSON.stringify(m.sources) : null,
+      m.action ? JSON.stringify(m.action) : null,
     );
   }
 }
@@ -193,7 +197,7 @@ type ChatRow = {
 type MessageRow = {
   id: string; role: Message['role']; content: string; reasoning: string | null;
   thought: number | null; speed: number | null; stopped: string | null; image: string | null;
-  context: string | null; sources: string | null;
+  context: string | null; sources: string | null; action: string | null;
 };
 type MetaRow = Pick<ChatRow, 'id' | 'title' | 'pinned' | 'updated_at' | 'project_id'> & { snippet?: string | null };
 
@@ -222,7 +226,7 @@ export const chatStore = {
       const row = await db.getFirstAsync<ChatRow>('SELECT * FROM chats WHERE id = ?', id);
       if (!row) return null;
       const messages = await db.getAllAsync<MessageRow>(
-        'SELECT id, role, content, reasoning, thought, speed, stopped, image, context, sources FROM messages WHERE chat_id = ? ORDER BY position',
+        'SELECT id, role, content, reasoning, thought, speed, stopped, image, context, sources, action FROM messages WHERE chat_id = ? ORDER BY position',
         id,
       );
       return {
@@ -247,6 +251,7 @@ export const chatStore = {
           image: m.image ?? undefined,
           context: m.context ?? undefined,
           sources: m.sources ? (JSON.parse(m.sources) as string[]) : undefined,
+          action: m.action ? (JSON.parse(m.action) as MessageAction) : undefined,
         })),
       };
     } catch {

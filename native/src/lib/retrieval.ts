@@ -328,8 +328,17 @@ export function referenceText(
     .join('\n\n');
 }
 
+/** The first line of something read from the phone itself (the calendar, say), not from the library. */
+export const FROM_PHONE = 'Read from this iPhone just now, with the user\'s permission.';
+
 /** A question with reference material in front of it, as the model is given it. */
 export function withReferences(question: string, references: string): string {
+  if (references.startsWith(FROM_PHONE)) {
+    return (
+      `${references}\n\nAnswer the question from that. It is the user's own and is correct and up to date. ` +
+      `Do not say you cannot see their calendar, reminders or location: it is above.\n\nQuestion: ${question}`
+    );
+  }
   return (
     "Reference material from the user's offline library follows. Each piece is headed by its source and title. " +
     'Use it to answer and to check your facts: where it covers the question, trust it over what you remember. ' +

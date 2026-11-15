@@ -52,7 +52,12 @@ export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[],
 }
 
 export function promptMessages(chat: Chat, settings: Settings, memories: Memory[], project?: Project) {
-  const turns = chat.messages.slice(chat.cut).filter((m) => m.content || m.image)
+  const kept = chat.messages.slice(chat.cut);
+  const turns = kept
+    // Something the app offered to do, and the request it answered, are between the user and
+    // the app. A small model that reads them starts writing offers of its own that do nothing.
+    .filter((m, i) => !m.action && !kept[i + 1]?.action)
+    .filter((m) => m.content || m.image)
     // What was looked up for a message is given to the model with it, every time,
     // so the conversation it has already read stays the same.
     // A request typed as a command ("/plan a trip") is written out in full here.
