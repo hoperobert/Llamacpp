@@ -195,6 +195,11 @@ export async function start() {
   }
   app.set({ settings, memories, chatList, customModels, projects, crashed: !!marker });
   repairTitles(chatList);
+  // If iOS closed the app while it was in the background, carry on where it was left.
+  const last = await store.lastOpen();
+  if (last && Date.now() - last.at < RETURN_WITHIN_MS && chatList.some((c) => c.id === last.chatId)) {
+    await openChat(last.chatId);
+  }
 
   const models = allFiles();
   const flags = await Promise.all(models.map((m) => isDownloaded(m)));
@@ -258,7 +263,6 @@ export async function start() {
   if (preferred && downloaded[preferred.id] && settings.loadedOnce && !marker) loadWhenOnScreen(preferred);
 
   AppState.addEventListener('change', onAppState);
-  AppState.addEventListener('memoryWarning', onMemoryWarning);
   // A download that stopped because the connection dropped carries on when it comes back.
   Network.addNetworkStateListener((state) => {
     if (state.isConnected && state.isInternetReachable !== false) resumeFailedDownloads();
@@ -282,9 +286,6 @@ async function repairTitles(chatList: ChatMeta[]) {
 
 // ---------- staying well-behaved in the background ----------
 
-/** Set when iOS asked for memory back and the model was let go to oblige. */
-let reloadOnReturn: Model | null = null;
-
 /** A model waiting to be loaded once the app is on screen. */
 let loadWhenActive: Model | null = null;
 
@@ -306,26 +307,20 @@ function onAppState(next: string) {
     if (app.get().busy) interrupted = 'Paused when you left the app.';
     engine.stop();
     Speech.stop().catch(() => {});
+    // The model stays loaded, so coming back is instant. iOS may still close
+    // the app to make room for others; note the chat, to come back to it then.
+    const { chat } = app.get();
+    store.setLastOpen(chat.messages.length && !chat.incognito ? { chatId: chat.id, at: Date.now() } : null);
   } else if (next === 'active') {
     resumeFailedDownloads();
-    const model = reloadOnReturn ?? loadWhenActive;
-    reloadOnReturn = null;
+    const model = loadWhenActive;
     loadWhenActive = null;
     if (model && app.get().engine.status === 'none') loadModel(model);
   }
 }
 
-function onMemoryWarning() {
-  const { engine: state, busy } = app.get();
-  if (AppState.currentState === 'active' || busy || state.status !== 'ready') return;
-  // Give the memory back while nobody is looking, so iOS does not close the
-  // whole app. The model is loaded again when the app is next opened.
-  reloadOnReturn = findModel(state.modelId);
-  withEngine(async () => {
-    await engine.unloadModel();
-    app.set({ engine: NO_ENGINE });
-  });
-}
+/** How long after leaving the app a relaunch still returns to the chat that was open. */
+const RETURN_WITHIN_MS = 30 * 60 * 1000;
 
 // ---------- models ----------
 

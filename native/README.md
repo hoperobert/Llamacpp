@@ -94,8 +94,9 @@ quiet: a paper-like palette with a blue accent.
 
 - A reply is stopped cleanly when the app goes to the background, because iOS
   does not allow GPU work there. What was written is kept.
-- If iOS asks for memory back while the app is in the background, the model is
-  let go and loaded again on return, so the app itself is not closed.
+- The model stays loaded while the app is in the background, so coming back
+  is instant. If iOS closes the app to make room for others, opening it again
+  within half an hour returns to the chat that was open.
 - Naming a chat and picking out memories also use the model. In a long chat
   they wait until the chat is left, so the next reply does not have to re-read
   the whole conversation.

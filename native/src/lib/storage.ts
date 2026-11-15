@@ -134,6 +134,11 @@ export const store = {
   ...chatStore,
   ...projectStore,
 
+  /** The chat that was on screen when the app was last left, and when. */
+  lastOpen: () => read<{ chatId: string; at: number } | null>('lastOpen', null),
+  setLastOpen: (value: { chatId: string; at: number } | null) =>
+    value ? write('lastOpen', value) : AsyncStorage.removeItem('lastOpen').catch(() => {}),
+
   /** Marker written while a model is loading; still present at start means the load crashed the app. */
   loadMarker: () => read<{ modelId: string; nCtx: number } | null>('loading', null),
   setLoadMarker: (value: { modelId: string; nCtx: number } | null) =>
