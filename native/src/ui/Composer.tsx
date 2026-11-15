@@ -35,6 +35,7 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   const status = app.use((s) => s.status);
   const queued = app.use((s) => s.queued);
   const attachment = app.use((s) => s.attachment);
+  const attachedFile = app.use((s) => s.attachedFile);
   const engine = app.use((s) => s.engine);
   const thinking = app.use((s) => s.settings.thinking);
   const styleId = app.use((s) => s.settings.style);
@@ -45,7 +46,7 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
     .filter(Boolean).join(' · ');
 
   const ready = engine.status === 'ready';
-  const typed = !!draft.trim() || !!attachment;
+  const typed = !!draft.trim() || !!attachment || !!attachedFile;
   // A command that acts on the app can be sent with no model loaded.
   const command = parseCommand(draft);
   const acts = !!command && !command.command.prompt;
@@ -121,6 +122,20 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
             </Pressable>
           </View>
         )}
+        {!!attachedFile && (
+          <View style={[styles.file, { backgroundColor: chip }]}>
+            <Icon name="doc.text" size={16} color={t.c.text} />
+            <Text numberOfLines={1} style={[styles.fileName, { color: t.c.text }]}>{attachedFile.name}</Text>
+            <Pressable
+              onPress={() => app.set({ attachedFile: null })}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Remove file"
+            >
+              <Icon name="xmark.circle.fill" size={18} color={t.c.secondary} />
+            </Pressable>
+          </View>
+        )}
         <TextInput
           ref={composerInput}
           value={draft}
@@ -187,6 +202,11 @@ const styles = StyleSheet.create({
   queuedText: { fontSize: 14 },
   photo: { alignSelf: 'flex-start', marginLeft: 6, marginTop: 4, marginBottom: 4 },
   photoImage: { width: 64, height: 64, borderRadius: 14 },
+  file: {
+    alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '90%',
+    marginLeft: 6, marginTop: 4, marginBottom: 4, paddingLeft: 12, paddingRight: 8, height: 36, borderRadius: 18,
+  },
+  fileName: { fontSize: 15, flexShrink: 1 },
   photoRemove: {
     position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10,
     alignItems: 'center', justifyContent: 'center',

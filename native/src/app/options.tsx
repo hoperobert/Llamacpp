@@ -4,7 +4,7 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { app, attachPhoto, changeSettings, download, findModel } from '../lib/app';
+import { app, attachPhoto, changeSettings, download, findModel, pickFile } from '../lib/app';
 import { formatMB, visionAddon } from '../lib/models';
 import { STYLES } from '../lib/storage';
 import { ChoiceRow, Row, Section, SwitchRow } from '../ui/List';
@@ -41,7 +41,11 @@ export default function OptionsSheet() {
   );
 }
 
-/** Adding a photo, or getting the add-on that lets this model look at one. Hidden for models that cannot. */
+/**
+ * Adding a photo or a file. A model that can look at photos is shown the photo.
+ * Any other model is given the words read out of it, and offered the add-on
+ * that lets it look, if it has one.
+ */
 function PhotoRow({ t }: { t: Theme }) {
   const router = useRouter();
   const engine = app.use((s) => s.engine);
@@ -49,21 +53,28 @@ function PhotoRow({ t }: { t: Theme }) {
   const addon = model ? visionAddon(model) : null;
   const onDevice = app.use((s) => (addon ? !!s.downloaded[addon.id] : false));
   const progress = app.use((s) => (addon ? s.downloads[addon.id] : undefined));
-  if (!addon || engine.status !== 'ready') return null;
+  if (engine.status !== 'ready') return null;
 
-  if (engine.vision) {
-    return (
-      <Section t={t}>
-        <Row t={t} icon="photo" title="Photo library" onPress={async () => { await attachPhoto('library'); router.back(); }} />
-        <Row t={t} icon="camera" title="Take photo" onPress={async () => { await attachPhoto('camera'); router.back(); }} />
-      </Section>
-    );
-  }
+  const attach = (
+    <>
+      <Row
+        t={t} icon="photo" title={engine.vision ? 'Photo library' : 'Read text in a photo'}
+        onPress={async () => { await attachPhoto('library'); router.back(); }}
+      />
+      <Row
+        t={t} icon="camera" title={engine.vision ? 'Take photo' : 'Read text with the camera'}
+        onPress={async () => { await attachPhoto('camera'); router.back(); }}
+      />
+      <Row t={t} icon="doc.text" title="File" onPress={async () => { await pickFile(); router.back(); }} />
+    </>
+  );
+  if (engine.vision || !addon) return <Section t={t}>{attach}</Section>;
   const percent = progress && progress.total ? Math.round((progress.loaded / progress.total) * 100) : 0;
   return (
     <Section t={t}>
+      {attach}
       <Row
-        t={t} icon="photo" title="Add photo"
+        t={t} icon="sparkles" title="Let this model see photos"
         value={
           progress?.status === 'downloading' ? `${percent}%`
           : progress?.status === 'finishing' ? 'Finishing…'

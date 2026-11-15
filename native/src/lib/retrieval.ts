@@ -331,8 +331,27 @@ export function referenceText(
 /** The first line of something read from the phone itself (the calendar, say), not from the library. */
 export const FROM_PHONE = 'Read from this iPhone just now, with the user\'s permission.';
 
+/** The first line of a file the user attached to a message. Its name follows on the same line. */
+export const FROM_FILE = 'A file the user attached:';
+/** The first line of the text read out of a photo, for a model that cannot look at photos. */
+export const FROM_PHOTO = 'Text read from a photo the user sent:';
+
+/** As much of a file as there is room for, headed the way the model is told to expect. */
+export function fileText(name: string, text: string, maxChars: number): { context: string; whole: boolean } {
+  const clean = text.replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  const whole = clean.length <= maxChars;
+  const part = whole ? clean : `${clean.slice(0, maxChars)}\n(The file is longer than this. Only its first part is here.)`;
+  return { context: `${FROM_FILE} ${name}\n\n${part}`, whole };
+}
+
 /** A question with reference material in front of it, as the model is given it. */
 export function withReferences(question: string, references: string): string {
+  if (references.startsWith(FROM_FILE)) {
+    return `${references}\n\nThat is the whole of what the user attached. Work from it.\n\n${question || 'Summarise this file.'}`;
+  }
+  if (references.startsWith(FROM_PHOTO)) {
+    return `${references}\n\nThe user cannot show you the photo itself, only this text from it.\n\n${question || 'What does this say?'}`;
+  }
   if (references.startsWith(FROM_PHONE)) {
     return (
       `${references}\n\nAnswer the question from that. It is the user's own and is correct and up to date. ` +

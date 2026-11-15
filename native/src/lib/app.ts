@@ -3,6 +3,8 @@
 
 import { Alert, AppState, Share } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Network from 'expo-network';
@@ -32,14 +34,16 @@ import {
 import { fit, formatMB, modelFromUrl, MODELS, visionAddon, type Model } from './models';
 import { askToNotify, clearNotifications, notify, setUpNotifications } from './notify';
 import {
-  backgroundProgress, beginBackgroundWork, endBackgroundWork, hasNative, onBackgroundExpire,
+  backgroundProgress, beginBackgroundWork, endBackgroundWork, hasNative, imageText, onBackgroundExpire, pdfText,
 } from '../../modules/pocket-native';
 import {
   blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store, STYLES,
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
 import { runnable, type Runnable } from './runner';
-import { asks, FROM_PHONE, referenceText, worthLookingUp, worthUsing, type Passage } from './retrieval';
+import {
+  asks, fileText, FROM_PHONE, FROM_PHOTO, referenceText, worthLookingUp, worthUsing, type Passage,
+} from './retrieval';
 import { describeClose, type Session } from './session';
 import { createStore } from './store';
 import { cleanTitle, isBrokenTitle } from './text';
@@ -79,6 +83,8 @@ type State = {
   queued: string;
   /** A photo waiting to be sent with the next message. */
   attachment: string | null;
+  /** A file waiting to be sent with the next message: its name and the text in it. */
+  attachedFile: { name: string; text: string } | null;
   crashed: boolean;
   /** How the last run of the app ended, for the bottom of Settings. */
   lastClose: string;
@@ -111,6 +117,7 @@ export const app = createStore<State>({
   draft: '',
   queued: '',
   attachment: null,
+  attachedFile: null,
   crashed: false,
   lastClose: '',
   lastError: '',
@@ -485,7 +492,7 @@ async function carryOnInBackground() {
   const { chat, settings, engine: state } = app.get();
   if (moving || allowance === 'none' || !settings.background || state.status !== 'ready' || !engine.usesGPU()) return;
   // A reply about a photo cannot be picked up part-way. It waits for the app to come back.
-  if (chat.messages.slice(chat.cut).some((m) => m.image)) return;
+  if (state.vision && chat.messages.slice(chat.cut).some((m) => m.image)) return;
   moving = true;
   const moved = await moveEngine(true);
   moving = false;
@@ -968,7 +975,7 @@ async function runTurn(userText: string | null, carryOn?: Message) {
   }
 }
 
-export async function send(text: string, photo: string | null = null) {
+export async function send(text: string, photo: string | null = null, file: State['attachedFile'] = null) {
   const typed = parseCommand(text);
   if (typed && !typed.command.prompt) {
     runCommand(typed.command, typed.arg);
@@ -980,10 +987,10 @@ export async function send(text: string, photo: string | null = null) {
   const image = photo && fresh && !chat.incognito ? await keepImage(photo) : photo ?? undefined;
   // "/plan a trip to Rome" is about a trip to Rome.
   const subject = subjectOf(text);
-  const title = chat.messages.length ? chat.title : (subject || 'Photo').replace(/\s+/g, ' ').slice(0, 48);
+  const title = chat.messages.length ? chat.title : (subject || file?.name || 'Photo').replace(/\s+/g, ' ').slice(0, 48);
   const asked: Message = { id: newId(), role: 'user', content: text, image };
   // Something to do on the phone ("remind me to…") is offered as a card to approve, not sent to the model.
-  const plain = !photo && !typed && app.get().settings.assistant;
+  const plain = !photo && !file && !typed && app.get().settings.assistant;
   const action = plain ? findAction(text, Date.now()) : null;
   if (action) {
     await saveChat({ ...chat, title, messages: [...chat.messages, asked, offer(action)] });
@@ -1003,6 +1010,19 @@ export async function send(text: string, photo: string | null = null) {
       return;
     }
     found = { context: `${FROM_PHONE}\n${got.text}`, sources: [got.from] };
+  } else if (file) {
+    // A file goes to the model with the message, as much of it as there is room for.
+    const room = Math.round(app.get().settings.nCtx * 0.55 * 3.5);
+    const given = fileText(file.name, file.text, room);
+    found = { context: given.context, sources: [file.name] };
+    if (!given.whole) toast('Only the first part of the file fits');
+  } else if (photo && !app.get().engine.vision) {
+    // This model cannot look at a photo, but the words in one can be read out for it.
+    const words = (await imageText(photo)).trim();
+    found = {
+      context: `${FROM_PHOTO}\n\n${words.slice(0, 6000) || '(No text could be read in the photo.)'}`,
+      sources: [words ? 'Text in the photo' : 'No text found in the photo'],
+    };
   } else if (!photo) {
     // A question that comes with a photo is about the photo, not about the words in it.
     found = await lookUp(subject, chat);
@@ -1136,9 +1156,36 @@ export async function attachPhoto(from: 'library' | 'camera' = 'library') {
   else if (uri) app.set({ attachment: uri });
 }
 
+/** Reads a file (a PDF, or anything that is text) and holds it to go with the next message. */
+export async function attachFile(uri: string, name?: string) {
+  const shown = name || decodeURIComponent(uri.split('/').pop() ?? 'File');
+  try {
+    const pdf = /\.pdf$/i.test(shown) || /\.pdf(?:$|\?)/i.test(uri);
+    // The browser preview hands over a file as an address to fetch.
+    const text = pdf ? await pdfText(uri) : /^(blob|data|https?):/.test(uri) ? await (await fetch(uri)).text() : await new File(uri).text();
+    if (!text.trim()) {
+      toast(/\.pdf$/i.test(shown) ? 'That PDF has no text in it, only pictures' : 'That file has no text in it');
+      return;
+    }
+    app.set({ attachedFile: { name: shown, text } });
+    haptic('success');
+  } catch {
+    toast('Could not read that file');
+  }
+}
+
+/** Lets the user choose a file to send with their next message. */
+export async function pickFile() {
+  const picked = await DocumentPicker.getDocumentAsync({
+    type: ['application/pdf', 'text/*', 'application/json', 'public.source-code', 'public.data'], copyToCacheDirectory: true,
+  }).catch(() => null);
+  const asset = picked && !picked.canceled ? picked.assets[0] : null;
+  if (asset) await attachFile(asset.uri, asset.name);
+}
+
 /** The send button: sends the draft, queues it, or stops the reply being written. */
 export function submit() {
-  const { busy, draft, attachment, engine: state } = app.get();
+  const { busy, draft, attachment, attachedFile, engine: state } = app.get();
   const text = draft.trim();
   const typed = parseCommand(text);
   if (typed && !typed.command.prompt) {
@@ -1162,13 +1209,13 @@ export function submit() {
     }
     return;
   }
-  if (!text && !attachment) return;
+  if (!text && !attachment && !attachedFile) return;
   // Something to do on the phone needs no model.
-  const forThePhone = !attachment && app.get().settings.assistant && !!findAction(text, Date.now());
+  const forThePhone = !attachment && !attachedFile && app.get().settings.assistant && !!findAction(text, Date.now());
   if (state.status !== 'ready' && !forThePhone) return;
   haptic();
-  app.set({ draft: '', attachment: null });
-  send(text, attachment);
+  app.set({ draft: '', attachment: null, attachedFile: null });
+  send(text, attachment, attachedFile);
 }
 
 export function stop() {
@@ -1212,7 +1259,7 @@ export async function openChat(id: string | null, fresh: { projectId?: string; i
   if (busy) stop();
   Speech.stop().catch(() => {});
   const next = (id && (await store.chat(id))) || blankChat(fresh);
-  app.set({ chat: next, draft: '', queued: '', attachment: null, speakingId: null });
+  app.set({ chat: next, draft: '', queued: '', attachment: null, attachedFile: null, speakingId: null });
   // The chat just left no longer needs the model's attention. Catch up now.
   flushSideJobs();
 }

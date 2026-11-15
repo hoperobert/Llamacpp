@@ -117,6 +117,11 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   "what are my reminders?", "where am I?") are answered from the phone. What
   was asked for, and when, is worked out by rule (`src/lib/assistant.ts`), not
   by the model: a small model gets dates wrong, and rules cost no time.
+- **Files and photos of text.** A PDF or a text file can be attached to a
+  message, or opened in Pocket LLM from Files, Mail or the share sheet; as
+  much of it as fits goes to the model with the question. A model that cannot
+  look at photos is given the words read out of one (a page, a sign, a
+  screenshot), so every model can be asked about a photo of text.
 - **Code runs on the phone.** A JavaScript block in a reply has a Run button
   and an HTML one has Preview. The code runs in a web view of its own, shut
   away from the app and its files and with no internet. What it prints, or the

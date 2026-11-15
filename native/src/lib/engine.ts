@@ -191,7 +191,7 @@ export async function continueChat(
   if (!context) throw new Error('No model is loaded');
   if (!onScreen()) throw new Interrupted();
   // A photo takes its own place in what the model reads, which this way of writing it out does not keep.
-  if (messages.some((m) => m.image)) throw new Error('A reply about a photo cannot be carried on');
+  if (vision && messages.some((m) => m.image)) throw new Error('A reply about a photo cannot be carried on');
   const formatted = await context.getFormattedChat(
     [...messages.map(({ role, content }) => ({ role, content })), { role: 'assistant', content: CONTINUE_HERE }],
     null,

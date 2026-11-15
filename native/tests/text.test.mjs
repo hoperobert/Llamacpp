@@ -213,3 +213,19 @@ const broke = [{ kind: 'error', text: 'ReferenceError: x is not defined' }];
 assert.equal(failed(broke), true);
 assert.ok(reportFor(broke).startsWith('I ran the code and it went wrong. Fix it.'));
 console.log('running code: all checks passed');
+
+// ---------- files and photo text given to the model ----------
+const { fileText, withReferences, FROM_FILE, FROM_PHOTO, FROM_PHONE } = await import('../src/lib/retrieval.ts');
+const small = fileText('notes.txt', 'One.\r\n\r\n\r\n\r\nTwo.  \nThree.', 1000);
+assert.deepEqual(small, { context: `${FROM_FILE} notes.txt\n\nOne.\n\nTwo.\nThree.`, whole: true });
+const big = fileText('book.pdf', 'x'.repeat(5000), 1000);
+assert.equal(big.whole, false);
+assert.ok(big.context.length < 1200 && big.context.endsWith('Only its first part is here.)'));
+// With nothing typed, the file is summarised. The library's wording is kept for the library.
+assert.ok(withReferences('', small.context).endsWith('Summarise this file.'));
+assert.ok(withReferences('Who wrote it?', small.context).endsWith('Who wrote it?'));
+assert.ok(!withReferences('Who wrote it?', small.context).includes('offline library'));
+assert.ok(withReferences('', `${FROM_PHOTO}\n\nNo parking`).endsWith('What does this say?'));
+assert.ok(withReferences('Am I free?', `${FROM_PHONE}\nNo events.`).includes('Do not say you cannot see'));
+assert.ok(withReferences('What is a cell?', 'Source: Wikipedia\nTitle: Cell\n\nA cell is…').includes('offline library'));
+console.log('files: all checks passed');
