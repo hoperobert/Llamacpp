@@ -333,6 +333,8 @@ export async function start() {
       }
       toast(`${file?.name ?? 'Model'} is ready`);
       haptic('success');
+      // iOS hands a finished download over even while the app is away.
+      if (AppState.currentState !== 'active') notify(`${file?.name ?? 'Your model'} is ready`, 'Downloaded and ready to use.');
       const model = findModel(modelId);
       const { engine: state } = app.get();
       if (model) {
