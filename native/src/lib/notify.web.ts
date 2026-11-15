@@ -5,5 +5,6 @@ export const shown: { title: string; body: string; chatId?: string }[] = [];
 
 export function setUpNotifications(_onOpen: (chatId: string) => void) {}
 export async function askToNotify() {}
+export function neverAskToNotify() {}
 export function notify(title: string, body: string, chatId?: string) { shown.push({ title, body, chatId }); }
 export function clearNotifications() {}

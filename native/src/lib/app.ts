@@ -838,7 +838,6 @@ async function runTurn(userText: string | null, carryOn?: Message) {
   await activateKeepAwakeAsync('chat').catch(() => {});
   if (app.get().settings.background && hasNative && allowance === 'none' && AppState.currentState === 'active') {
     // Asked for now, while the app is on screen: iOS does not grant it to an app that has already left.
-    askToNotify();
     allowance = await beginBackgroundWork('Writing a reply', app.get().chat.title || 'Pocket LLM');
   }
 
@@ -933,6 +932,9 @@ async function runTurn(userText: string | null, carryOn?: Message) {
     return;
   }
   if (!stoppedByUser && !interrupted) haptic('success');
+  // Once a first reply is done is the moment to ask about notifications: asking
+  // while it is written would cover the app, which pauses a reply.
+  if (AppState.currentState === 'active' && app.get().settings.background && hasNative) askToNotify();
   if (AppState.currentState !== 'active' && !stoppedByUser && !interrupted && app.get().chat.id === chatId) {
     // Finished while the app was away.
     const reply = app.get().chat.messages.at(-1);

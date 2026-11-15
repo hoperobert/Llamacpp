@@ -128,10 +128,19 @@ quiet: a paper-like palette with a blue accent.
 
 - iOS does not let an iPhone app use the GPU in the background (the
   allowance for it in iOS 26 covers only iPads with an M3 or newer), and closes
-  one that tries. So a reply stops as the app leaves the screen, and carries on
-  from its last word when the app is back, without anything to tap. One that
-  was still thinking is asked again, as is a message sent just as the app was
-  left.
+  one that tries. So a reply stops on the GPU as the app leaves the screen.
+- **It is then finished in the background.** When a reply starts, the app asks
+  iOS for time to finish it (a continued processing task on iOS 26, which
+  shows its progress on the Lock Screen; about half a minute before that). If
+  the app is left, the model is loaded again on the processor alone, which iOS
+  allows, and the reply carries on from its last word, more slowly. A
+  notification says when it is done, and tapping it opens the chat. If iOS
+  calls time first, a notification says the reply is paused and it carries on
+  when the app is opened. Back on screen the model returns to the GPU. Replies
+  about photos wait for the app to come back. Settings has a switch for this.
+- Without that time, a reply carries on from its last word when the app is
+  back, without anything to tap. One that was still thinking is asked again,
+  as is a message sent just as the app was left.
 - The bottom of Settings says how the app last closed (on screen or in the
   background, and what it was doing), which tells a crash from iOS making room.
 - The model stays loaded while the app is in the background, so coming back

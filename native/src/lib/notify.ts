@@ -41,6 +41,9 @@ export async function askToNotify() {
   }
 }
 
+/** For the simulator test, where nobody is there to answer the question. */
+export function neverAskToNotify() { asked = true; }
+
 /** Shows a notification now. Quietly does nothing if they are not allowed. */
 export function notify(title: string, body: string, chatId?: string) {
   Notifications.scheduleNotificationAsync({

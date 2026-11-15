@@ -16,9 +16,10 @@ import { AppState } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import { router } from 'expo-router';
 import { composerInput } from '../ui/Composer';
-import { app, changeSettings, download, loadModel, newChat, runCommand, send, stop } from './app';
+import { app, changeSettings, download, loadModel, newChat, runCode, runCommand, send, stop } from './app';
 import { COMMANDS } from './commands';
-import { engineVersion } from './engine';
+import { engineVersion, usesGPU } from './engine';
+import { neverAskToNotify } from './notify';
 import { MODELS } from './models';
 import { DEFAULT_FLAGS, type SimFlags } from './simFlags';
 import { createStore } from './store';
@@ -54,7 +55,8 @@ function state(): string {
   const s = app.get();
   const last = s.chat.messages.at(-1);
   return JSON.stringify({
-    engine: s.engine.status, model: s.engine.modelId, gpu: s.engine.gpu, nCtx: s.settings.nCtx, busy: s.busy,
+    engine: s.engine.status, model: s.engine.modelId, gpu: s.engine.gpu, onGPU: usesGPU(), nCtx: s.settings.nCtx, busy: s.busy,
+    live: s.live?.content.length,
     messages: s.chat.messages.length, last: last ? `${last.role}:${last.content.length}` : null,
     stopped: last?.stopped, speed: last?.speed, title: s.chat.title, error: s.engine.error, lastError: s.lastError || undefined,
   });
@@ -91,7 +93,7 @@ async function ask(text: string, limit = 120000) {
  * the header while the keyboard is up. A line beginning DUMP asks for the
  * system's own list of what is on screen, which shows what the grey is.
  */
-async function variants() {
+export async function variants() {
   const tries: [string, Partial<SimFlags>][] = [
     ['as shipped', {}],
     ['no header at all', { header: false }],
@@ -230,6 +232,9 @@ async function scenario() {
   await until(() => (app.get().live?.content.length ?? 0) > 120, 60000);
   const before = app.get().live?.content ?? '';
   await leave('with half a reply written');
+  // With time granted by iOS it carries on while away, on the processor. Otherwise on return.
+  const onReturn = app.get().live?.content.length ?? app.get().chat.messages.at(-1)?.content.length ?? 0;
+  step(`written while away: ${onReturn - before.length} characters (${before.length} -> ${onReturn}) ${state()}`);
   await until(() => app.get().busy, 8000);
   step(`carrying on? ${state()}`);
   await until(() => !app.get().busy, 120000);
@@ -286,7 +291,23 @@ async function scenario() {
   }
   keyboard(false);
   await wait(1000);
-  await variants();
+
+  // ---------- running code a model wrote ----------
+  runCode('js', 'console.log("six times seven is", 6 * 7);\nawait new Promise((r) => setTimeout(r, 500));\nreturn [1, 2, 3].map((n) => n * n);');
+  step('run screen open: a script that prints 42 and returns [1,4,9]');
+  await wait(5000);
+  router.back();
+  await wait(1200);
+  runCode('js', 'console.log("before");\nnotDefined();');
+  step('run screen open: a script that fails');
+  await wait(4000);
+  router.back();
+  await wait(1200);
+  runCode('html', '<!doctype html><html><body style="font-family:system-ui;padding:24px"><h1>Hello from a page</h1><p id="p">Script has not run</p><img src="https://example.com/a.png"><script>document.getElementById("p").textContent = "Script ran"; console.log("page ready");</script></body></html>');
+  step('run screen open: a page');
+  await wait(5000);
+  router.back();
+  await wait(1200);
   step(`finished ${state()}`);
 }
 
@@ -300,5 +321,7 @@ export function runSim() {
   // With the stand-in, replies last long enough to do things while they are being written.
   if (!REAL) (globalThis as { pocketPace?: number }).pocketPace = 2;
   if (written.includes(' finished ')) return;
+  // Nobody is there to answer the question about notifications, and it would cover the app.
+  neverAskToNotify();
   scenario().catch((error) => step(`SCRIPT ERROR ${String((error as Error)?.stack ?? error).slice(0, 400)}`));
 }
