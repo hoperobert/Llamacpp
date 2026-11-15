@@ -4,6 +4,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { chatStore, projectStore } from './db';
 import type { Model } from './models';
+import type { Session } from './session';
 
 export type Message = {
   id?: string;
@@ -138,6 +139,10 @@ export const store = {
   lastOpen: () => read<{ chatId: string; at: number } | null>('lastOpen', null),
   setLastOpen: (value: { chatId: string; at: number } | null) =>
     value ? write('lastOpen', value) : AsyncStorage.removeItem('lastOpen').catch(() => {}),
+
+  /** What the app was doing, for working out afterwards why it closed. See session.ts. */
+  session: () => read<Session | null>('session', null),
+  setSession: (value: Session) => write('session', value),
 
   /** Marker written while a model is loading; still present at start means the load crashed the app. */
   loadMarker: () => read<{ modelId: string; nCtx: number } | null>('loading', null),

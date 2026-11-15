@@ -52,6 +52,14 @@ export async function unloadModel() { loaded = false; }
 export const isLoaded = () => loaded;
 export function stop() { stopping = true; }
 
+export class Interrupted extends Error {
+  constructor() {
+    super('Interrupted');
+    this.name = 'Interrupted';
+  }
+}
+export const isInterrupted = (error: unknown) => (error as Error | null)?.name === 'Interrupted';
+
 export async function chat(
   _messages: ChatMessage[],
   options: { temperature: number; maxTokens: number; thinking: boolean },

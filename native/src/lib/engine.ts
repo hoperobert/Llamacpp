@@ -1,10 +1,29 @@
 // Wraps llama.rn (llama.cpp built natively, running on the GPU through Metal).
 
+import { AppState } from 'react-native';
 import { BuildInfo, initLlama, type LlamaContext } from 'llama.rn';
 import { imageUri } from './images';
 
 let context: LlamaContext | null = null;
 let vision = false;
+/** Set when whatever the model was doing was told to stop. */
+let cut = false;
+
+/**
+ * iOS closes an app that uses the GPU in the background. So nothing is asked of
+ * the model unless the app is on screen, and this is the one place that checks.
+ */
+const onScreen = () => AppState.currentState === 'active';
+
+/** The model was not asked, because the app is off screen, or its answer was cut short and is no use. */
+export class Interrupted extends Error {
+  constructor() {
+    super('Interrupted');
+    this.name = 'Interrupted';
+  }
+}
+
+export const isInterrupted = (error: unknown) => (error as Error | null)?.name === 'Interrupted';
 
 export const engineVersion = `b${BuildInfo.number}`;
 
@@ -58,6 +77,7 @@ export async function unloadModel() {
 export const isLoaded = () => context !== null;
 
 export function stop() {
+  cut = true;
   context?.stopCompletion().catch(() => {});
 }
 
@@ -68,6 +88,7 @@ export async function chat(
   onUpdate: (content: string, reasoning: string) => void,
 ): Promise<{ content: string; reasoning: string; timings: Timings }> {
   if (!context) throw new Error('No model is loaded');
+  if (!onScreen()) throw new Interrupted();
   let raw = '';
   const started = Date.now();
   let answerAt = 0;
@@ -120,6 +141,8 @@ export async function complete(
   options: { maxTokens?: number; schema?: object } = {},
 ): Promise<string> {
   if (!context) throw new Error('No model is loaded');
+  if (!onScreen()) throw new Interrupted();
+  cut = false;
   const result = await context.completion({
     messages: messages.map(({ role, content }) => ({ role, content })),
     jinja: true,
@@ -130,5 +153,7 @@ export async function complete(
       ? { response_format: { type: 'json_schema' as const, json_schema: { strict: true, schema: options.schema } } }
       : {}),
   });
+  // Half a title or half a summary is worse than none.
+  if (cut) throw new Interrupted();
   return (result.content ?? result.text ?? '').trim();
 }

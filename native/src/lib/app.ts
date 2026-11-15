@@ -29,6 +29,7 @@ import {
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
 import { referenceText, worthLookingUp } from './retrieval';
+import { describeClose, type Session } from './session';
 import { createStore } from './store';
 import { cleanTitle, isBrokenTitle } from './text';
 
@@ -68,6 +69,8 @@ type State = {
   /** A photo waiting to be sent with the next message. */
   attachment: string | null;
   crashed: boolean;
+  /** How the last run of the app ended, for the bottom of Settings. */
+  lastClose: string;
   toast: string;
   speakingId: string | null;
 };
@@ -94,6 +97,7 @@ export const app = createStore<State>({
   queued: '',
   attachment: null,
   crashed: false,
+  lastClose: '',
   toast: '',
   speakingId: null,
 });
@@ -181,10 +185,12 @@ export async function start() {
   if (started) return;
   started = true;
 
-  const [savedSettings, memories, chatList, marker, customModels, projects] = await Promise.all([
+  const [savedSettings, memories, chatList, marker, customModels, projects, previous] = await Promise.all([
     store.settings(), memoryStore.all(), store.chatList(), store.loadMarker(), store.customModels(),
-    store.projects(),
+    store.projects(), store.session(),
   ]);
+  app.set({ lastClose: describeClose(previous, Date.now()) });
+  note({ phase: AppState.currentState ?? 'active', since: Date.now() });
   let settings = savedSettings;
   // A marker left behind means the last load took the app down, most likely
   // by running out of memory. Do not auto-load into that again.
@@ -248,6 +254,7 @@ export async function start() {
         else delete library[id];
         return { library };
       });
+      doing('preparing the library', state?.status === 'preparing');
       if (state?.status === 'ready' && before === 'preparing') {
         toast(`${SOURCES.find((s) => s.id === id)?.name ?? 'Library'} is ready`);
         haptic('success');
@@ -263,6 +270,7 @@ export async function start() {
   if (preferred && downloaded[preferred.id] && settings.loadedOnce && !marker) loadWhenOnScreen(preferred);
 
   AppState.addEventListener('change', onAppState);
+  AppState.addEventListener('memoryWarning', () => note({ warnings: session.warnings + 1 }));
   // A download that stopped because the connection dropped carries on when it comes back.
   Network.addNetworkStateListener((state) => {
     if (state.isConnected && state.isInternetReachable !== false) resumeFailedDownloads();
@@ -289,6 +297,23 @@ async function repairTitles(chatList: ChatMeta[]) {
 /** A model waiting to be loaded once the app is on screen. */
 let loadWhenActive: Model | null = null;
 
+/** A reply that could not be started because the app had left the screen. It is written on return. */
+let resumeTurn: { chatId: string; userText: string | null } | null = null;
+
+/** What the app is doing right now, saved as it changes. See session.ts. */
+let session: Session = { phase: 'active', since: Date.now(), doing: [], model: null, warnings: 0 };
+
+function note(patch: Partial<Session>) {
+  session = { ...session, ...patch };
+  store.setSession(session);
+}
+
+/** Marks the start or end of something worth knowing about if the app closes during it. */
+function doing(what: string, on: boolean) {
+  const rest = session.doing.filter((d) => d !== what);
+  note({ doing: on ? [...rest, what] : rest });
+}
+
 /**
  * Loads a model now if the app is on screen, otherwise as soon as it is.
  * iOS can start the app in the background (to hand over a finished download),
@@ -307,15 +332,23 @@ function onAppState(next: string) {
     if (app.get().busy) interrupted = 'Paused when you left the app.';
     engine.stop();
     Speech.stop().catch(() => {});
+    if (session.phase === 'active') note({ phase: next, since: Date.now(), warnings: 0 });
+    else note({ phase: next });
     // The model stays loaded, so coming back is instant. iOS may still close
     // the app to make room for others; note the chat, to come back to it then.
     const { chat } = app.get();
     store.setLastOpen(chat.messages.length && !chat.incognito ? { chatId: chat.id, at: Date.now() } : null);
   } else if (next === 'active') {
+    note({ phase: next, since: Date.now() });
     resumeFailedDownloads();
     const model = loadWhenActive;
     loadWhenActive = null;
     if (model && app.get().engine.status === 'none') loadModel(model);
+    // A message sent just before leaving gets its reply now.
+    const turn = resumeTurn;
+    resumeTurn = null;
+    const { chat, busy } = app.get();
+    if (turn && !busy && chat.id === turn.chatId && chat.messages.at(-1)?.role === 'user') runTurn(turn.userText);
   }
 }
 
@@ -325,8 +358,14 @@ const RETURN_WITHIN_MS = 30 * 60 * 1000;
 // ---------- models ----------
 
 export async function loadModel(model: Model, nCtx = app.get().settings.nCtx) {
+  if (AppState.currentState !== 'active') {
+    loadWhenActive = model;
+    return;
+  }
   app.set({ engine: { status: 'loading', modelId: model.id, fraction: 0, error: null, gpu: false, vision: false } });
   await withEngine(async () => {
+    doing('loading a model', true);
+    note({ model: null });
     await store.setLoadMarker({ modelId: model.id, nCtx });
     await activateKeepAwakeAsync('load').catch(() => {});
     try {
@@ -340,6 +379,7 @@ export async function loadModel(model: Model, nCtx = app.get().settings.nCtx) {
         app.set((s) => (s.engine.status === 'loading' ? { engine: { ...s.engine, fraction } } : {}));
       }, projector);
       app.set({ engine: { status: 'ready', modelId: model.id, fraction: 1, error: null, gpu, vision }, crashed: false });
+      note({ model: model.name });
       updateSettings({ modelId: model.id, loadedOnce: true });
       haptic('success');
     } catch (e) {
@@ -352,6 +392,7 @@ export async function loadModel(model: Model, nCtx = app.get().settings.nCtx) {
       haptic('warning');
     }
     await store.setLoadMarker(null);
+    doing('loading a model', false);
     deactivateKeepAwake('load').catch(() => {});
   });
 }
@@ -479,6 +520,7 @@ function flushSideJobs() {
         return;
       }
       const { settings } = app.get();
+      doing('naming a chat', true);
       if (job.title && settings.autoTitle) {
         const chat = app.get().chat.id === job.chatId ? app.get().chat : await store.chat(job.chatId);
         if (chat && !chat.titled && chat.messages.length >= 2) {
@@ -506,6 +548,9 @@ function flushSideJobs() {
           toast(saved === 1 ? 'Saved 1 memory' : `Saved ${saved} memories`);
         }
       }
+      doing('naming a chat', false);
+      // Cut short by leaving the app: try again another time.
+      if (AppState.currentState !== 'active') sideJobs.push(job);
     });
   }
 }
@@ -514,8 +559,14 @@ async function runTurn(userText: string | null) {
   stoppedByUser = false;
   interrupted = '';
   const chatId = app.get().chat.id;
+  if (AppState.currentState !== 'active') {
+    // Sent just as the app was left. The reply is written on return.
+    resumeTurn = { chatId, userText };
+    return;
+  }
   const message: Message = { id: newId(), role: 'assistant', content: '' };
   app.set({ busy: true, live: message });
+  doing('writing a reply', true);
   await activateKeepAwakeAsync('chat').catch(() => {});
 
   await withEngine(async () => {
@@ -525,7 +576,10 @@ async function runTurn(userText: string | null) {
       const { settings, memories, project } = contextFor(current());
       if (usedTokens(current(), settings, memories, project) > settings.nCtx - replyBudget(settings) - 48) {
         app.set({ status: 'Summarising earlier messages…' });
-        await saveChat(await ensureRoom(current(), settings, memories, project));
+        const roomier = await ensureRoom(current(), settings, memories, project);
+        // A summary cut short by leaving the app must not replace the messages it stands for.
+        if (stoppedByUser || AppState.currentState !== 'active') throw new engine.Interrupted();
+        await saveChat(roomier);
         app.set({ status: '' });
       }
       let lastPaint = 0;
@@ -559,6 +613,11 @@ async function runTurn(userText: string | null) {
       }
     } catch (e) {
       const partial = message.content.trim();
+      if (engine.isInterrupted(e) && !stoppedByUser && !partial) {
+        // The app left the screen before the reply could begin. Begin it on return.
+        interrupted = interrupted || 'Paused when you left the app.';
+        resumeTurn = { chatId, userText };
+      }
       if (partial && onScreen()) {
         const chat = current();
         await saveChat({
@@ -575,6 +634,7 @@ async function runTurn(userText: string | null) {
   });
 
   deactivateKeepAwake('chat').catch(() => {});
+  doing('writing a reply', false);
   app.set({ busy: false });
   if (!stoppedByUser && !interrupted) haptic('success');
 

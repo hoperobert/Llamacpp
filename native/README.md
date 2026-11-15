@@ -92,8 +92,12 @@ quiet: a paper-like palette with a blue accent.
 
 ## Being a good citizen on the phone
 
-- A reply is stopped cleanly when the app goes to the background, because iOS
-  does not allow GPU work there. What was written is kept.
+- iOS closes an app that uses the GPU in the background. A reply is stopped
+  cleanly as the app leaves the screen and what was written is kept; nothing
+  is asked of the model until the app is back. A message sent just as the app
+  was left gets its reply on return.
+- The bottom of Settings says how the app last closed (on screen or in the
+  background, and what it was doing), which tells a crash from iOS making room.
 - The model stays loaded while the app is in the background, so coming back
   is instant. If iOS closes the app to make room for others, opening it again
   within half an hour returns to the chat that was open.

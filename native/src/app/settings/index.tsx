@@ -17,6 +17,7 @@ export default function SettingsScreen() {
   const memories = app.use((s) => s.memories);
   const engine = app.use((s) => s.engine);
   const chatCount = app.use((s) => s.chatList.length);
+  const lastClose = app.use((s) => s.lastClose);
   const model = findModel(engine.modelId);
 
   return (
@@ -97,6 +98,7 @@ export default function SettingsScreen() {
             engine.status === 'ready' ? (engine.gpu ? 'GPU' : 'CPU') : '',
           ].filter(Boolean).join(' · ')}
         </Text>
+        {!!lastClose && <Text style={[styles.about, styles.lastClose, { color: t.c.tertiary }]}>{lastClose}</Text>}
       </ScrollView>
     </>
   );
@@ -105,4 +107,5 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   body: { padding: 16, gap: 24, paddingBottom: 48 },
   about: { fontSize: 13, textAlign: 'center' },
+  lastClose: { marginTop: -16, paddingHorizontal: 12 },
 });
