@@ -58,10 +58,13 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   connection, a pause, closing the app or an app update never costs more than
   the piece in flight. They carry on in the background, pick up by themselves
   when the connection returns, and show speed and time remaining.
-- **Thinking**, a reply **style** (Normal, Concise, Explain, Formal) and reply
+- **Thinking** stays out of the way: one line says the model is thinking, or
+  for how long it thought, and tapping it shows the reasoning.
+- Whether to think first, a reply **style** (Normal, Concise, Explain, Formal) and reply
   length are set from the "+" in the message box.
-- **Photos** can be sent to models that can look at them (Qwen3.5 2B and 4B,
-  Gemma 4 E2B) after a one-off add-on download for that model.
+- **Photos** from the library or the camera can be sent to models that can
+  look at them, marked with a picture in the model list. What such a model
+  needs for it is downloaded along with the model.
 - **Look up** answers from an offline library instead of the web. The
   passages that fit a question are found on the phone and handed to the model
   with it; their titles show under your message. The library holds text files

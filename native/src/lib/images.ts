@@ -14,6 +14,17 @@ export async function pickImage(): Promise<string | null> {
 }
 
 /**
+ * Lets the user take a photo with the camera. Returns where it is, null if
+ * they cancelled, or 'denied' if the app is not allowed to use the camera.
+ */
+export async function takePhoto(): Promise<string | null> {
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+  if (!permission.granted) return 'denied';
+  const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
+  return result.canceled ? null : result.assets[0]?.uri ?? null;
+}
+
+/**
  * Copies a picked photo into the app's storage and returns the name to keep
  * with the message. Only the name is stored, because iOS moves the app's
  * folder when the app is updated.

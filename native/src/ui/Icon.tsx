@@ -53,6 +53,7 @@ const SYMBOLS = {
   'doc.text': 'description',
   'xmark': 'close',
   'photo': 'image',
+  'camera': 'photo_camera',
   'line.3.horizontal': 'menu',
   'folder': 'folder',
   'folder.badge.plus': 'create_new_folder',

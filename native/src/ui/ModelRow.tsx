@@ -60,9 +60,12 @@ export const ModelRow = React.memo(function ModelRow({ t, model, onUsed }: {
     <Pressable onLongPress={onDevice || dl ? more : undefined} delayLongPress={320} style={styles.row}>
       <View style={styles.top}>
         <View style={styles.flex}>
-          <Text style={[styles.name, { color: t.c.text }]}>{model.name}</Text>
+          <View style={styles.title}>
+            <Text style={[styles.name, { color: t.c.text }]}>{model.name}</Text>
+            {!!model.vision && <Icon name="photo" size={15} color={t.c.tertiary} />}
+          </View>
           <Text numberOfLines={1} style={[styles.meta, { color: suits === 'tight' ? t.c.warn : t.c.secondary }]}>
-            {[model.sizeMB ? formatMB(model.sizeMB) : '', suits === 'tight' ? 'Tight fit' : model.note]
+            {[model.sizeMB ? formatMB(model.sizeMB + (model.vision?.sizeMB ?? 0)) : '', suits === 'tight' ? 'Tight fit' : model.note]
               .filter(Boolean).join(' · ')}
           </Text>
         </View>
@@ -152,6 +155,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   row: { paddingHorizontal: 16, paddingVertical: 13, gap: 8 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  title: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { fontSize: 17, fontWeight: '600' },
   meta: { fontSize: 14, marginTop: 2 },
   pill: { minWidth: 68, height: 32, borderRadius: 16, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },

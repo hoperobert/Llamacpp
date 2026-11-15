@@ -18,7 +18,7 @@ import {
   addMemory, compact, ensureRoom, extractFacts, promptMessages, replyBudget, suggestTitle, usedTokens,
 } from './logic';
 import { memoryStore } from './db';
-import { deleteAllImages, deleteImages, keepImage, pickImage } from './images';
+import { deleteAllImages, deleteImages, keepImage, pickImage, takePhoto } from './images';
 import {
   addText, libraryFiles, libraryReady, lookup, prepare, removeSource, removeText, restoreLibrary, SOURCES,
   sourceDownload, sourceForDownload, type LibraryFile, type Source, type SourceState,
@@ -415,22 +415,32 @@ export function switchModel(model: Model) {
 }
 
 export async function download(model: Model) {
+  const { downloaded, downloads } = app.get();
+  // The add-on that lets this model look at photos, if it has one and it is not here yet.
+  const wanted = visionAddon(model);
+  const addon = wanted && !downloaded[wanted.id] && !downloads[wanted.id] ? wanted : null;
+  const sizeMB = model.sizeMB + (addon?.sizeMB ?? 0);
   const free = freeDiskMB();
-  if (free !== null && model.sizeMB && model.sizeMB + 300 > free) {
+  if (free !== null && model.sizeMB && sizeMB + 300 > free) {
     Alert.alert(
       'Not enough storage',
-      `${model.name} needs ${formatMB(model.sizeMB)} and this iPhone has ${formatMB(free)} free.`,
+      `${model.name} needs ${formatMB(sizeMB)} and this iPhone has ${formatMB(free)} free.`,
     );
     return;
   }
-  const begin = () => { haptic(); startDownload(model); };
+  const begin = () => {
+    haptic();
+    startDownload(model);
+    // A model that can look at photos gets what it needs for that at the same time.
+    if (addon) startDownload(addon);
+  };
   const resuming = !!app.get().downloads[model.id];
-  if (!resuming && app.get().settings.cellularWarning && model.sizeMB >= 200) {
+  if (!resuming && app.get().settings.cellularWarning && sizeMB >= 200) {
     const state = await Network.getNetworkStateAsync().catch(() => null);
     if (state?.type === Network.NetworkStateType.CELLULAR) {
       Alert.alert(
         'Download on mobile data?',
-        `${model.name} is ${formatMB(model.sizeMB)}. You are not on Wi-Fi.`,
+        `${model.name} is ${formatMB(sizeMB)}. You are not on Wi-Fi.`,
         [{ text: 'Cancel', style: 'cancel' }, { text: 'Download', onPress: begin }],
       );
       return;
@@ -695,10 +705,11 @@ async function lookUp(text: string, chat: Chat): Promise<{ context?: string; sou
   return { context: referenceText(passages), sources: [...new Set(passages.map((p) => p.title))] };
 }
 
-/** Lets the user pick a photo to send with their next message. */
-export async function attachPhoto() {
-  const uri = await pickImage().catch(() => null);
-  if (uri) app.set({ attachment: uri });
+/** Lets the user pick a photo, or take one, to send with their next message. */
+export async function attachPhoto(from: 'library' | 'camera' = 'library') {
+  const uri = await (from === 'camera' ? takePhoto() : pickImage()).catch(() => null);
+  if (uri === 'denied') toast('Allow the camera in Settings');
+  else if (uri) app.set({ attachment: uri });
 }
 
 /** The send button: sends the draft, queues it, or stops the reply being written. */

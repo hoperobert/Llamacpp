@@ -41,7 +41,7 @@ export default function RootLayout() {
         <Stack.Screen
           name="options"
           options={{
-            headerShown: false, presentation: 'formSheet', sheetAllowedDetents: [0.6],
+            headerShown: false, presentation: 'formSheet', sheetAllowedDetents: [0.72],
             sheetGrabberVisible: true, sheetCornerRadius: 28,
           }}
         />

@@ -54,7 +54,8 @@ function PhotoRow({ t }: { t: Theme }) {
   if (engine.vision) {
     return (
       <Section t={t}>
-        <Row t={t} icon="photo" title="Add photo" onPress={async () => { await attachPhoto(); router.back(); }} />
+        <Row t={t} icon="photo" title="Photo library" onPress={async () => { await attachPhoto('library'); router.back(); }} />
+        <Row t={t} icon="camera" title="Take photo" onPress={async () => { await attachPhoto('camera'); router.back(); }} />
       </Section>
     );
   }
@@ -62,7 +63,7 @@ function PhotoRow({ t }: { t: Theme }) {
   return (
     <Section t={t}>
       <Row
-        t={t} icon="photo" title="Photos"
+        t={t} icon="photo" title="Add photo"
         value={
           progress?.status === 'downloading' ? `${percent}%`
           : progress?.status === 'finishing' ? 'Finishing…'

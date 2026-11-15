@@ -128,7 +128,10 @@ function Action({ t, icon, label, onPress }: { t: Theme; icon: IconName; label: 
   );
 }
 
-/** The model's reasoning: live while it thinks, folded away once it answers. */
+/**
+ * The model's reasoning, kept out of the way: one line that says it is thinking,
+ * or for how long it thought. Tapping the line shows the reasoning itself.
+ */
 function Thinking({ t, message, streaming }: { t: Theme; message: Message; streaming: boolean }) {
   const [open, setOpen] = useState(false);
   const reasoning = message.reasoning?.trim();
@@ -137,36 +140,33 @@ function Thinking({ t, message, streaming }: { t: Theme; message: Message; strea
   const label = thinkingNow
     ? 'Thinking…'
     : message.thought ? `Thought for ${message.thought}s` : 'Thought';
-  // While it thinks, show where the thought has got to rather than where it began.
-  const shown = thinkingNow ? reasoning.slice(-260).replace(/^\S*\s/, '…') : reasoning;
   return (
     <View style={styles.thinking}>
       <Pressable
         onPress={() => setOpen((v) => !v)}
-        disabled={thinkingNow}
-        hitSlop={8}
-        style={styles.thinkingHead}
+        hitSlop={10}
+        style={({ pressed }) => [styles.thinkingHead, pressed && styles.dim]}
         accessibilityRole="button"
         accessibilityLabel={`${label}. ${open ? 'Hide' : 'Show'} reasoning`}
       >
-        <Icon name="lightbulb" size={16} color={t.c.secondary} />
+        {thinkingNow ? <Pulse t={t} /> : <Icon name="lightbulb" size={16} color={t.c.secondary} />}
         <Text style={[styles.thinkingLabel, { color: t.c.secondary }]}>{label}</Text>
-        {!thinkingNow && <Icon name={open ? 'chevron.down' : 'chevron.right'} size={12} color={t.c.tertiary} weight="semibold" />}
+        <Icon name={open ? 'chevron.down' : 'chevron.right'} size={12} color={t.c.tertiary} weight="semibold" />
       </Pressable>
-      {(open || thinkingNow) && (
+      {open && (
         <Text
           selectable={!thinkingNow}
           style={[styles.thinkingText, { color: t.c.secondary, borderLeftColor: t.c.line, fontSize: t.size - 2, lineHeight: (t.size - 2) * 1.45 }]}
         >
-          {shown}
+          {reasoning}
         </Text>
       )}
     </View>
   );
 }
 
-/** A pulsing dot and a word, shown while the model reads the conversation. */
-function Dots({ t }: { t: Theme }) {
+/** A dot that breathes while the model is busy. */
+function Pulse({ t }: { t: Theme }) {
   const [pulse] = useState(() => new Animated.Value(0.25));
   useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
@@ -176,9 +176,14 @@ function Dots({ t }: { t: Theme }) {
     loop.start();
     return () => loop.stop();
   }, [pulse]);
+  return <Animated.View style={[styles.dot, { backgroundColor: t.c.accent, opacity: pulse }]} />;
+}
+
+/** A pulsing dot and a word, shown while the model reads the conversation. */
+function Dots({ t }: { t: Theme }) {
   return (
     <View style={styles.dots}>
-      <Animated.View style={[styles.dot, { backgroundColor: t.c.accent, opacity: pulse }]} />
+      <Pulse t={t} />
       <Text style={[styles.working, { color: t.c.secondary }]}>Working…</Text>
     </View>
   );
