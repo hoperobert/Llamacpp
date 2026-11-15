@@ -18,6 +18,8 @@ import { useTheme, type Theme } from '../ui/theme';
 /** More lines than this and the oldest are dropped, so a runaway loop cannot fill the phone. */
 const MOST_LINES = 500;
 
+const troubling = (line: Line) => line.kind === 'error' || line.kind === 'blocked';
+
 /** Asks for a name. The browser preview has no such alert of its own. */
 function askName(title: string, suggestion: string, then: (name: string) => void) {
   if (Platform.OS === 'ios') {
@@ -160,9 +162,10 @@ export default function RunScreen() {
       ) : page ? (
         <>
           <Sandbox key={attempt} html={html} onLine={onLine} onAsk={askPhone} style={styles.page} />
-          {!!lines.length && (
+          {/* Under a page, only what went wrong: what it merely logs is its own business. */}
+          {lines.some(troubling) && (
             <ScrollView style={[styles.problems, { borderTopColor: t.c.line }]} contentContainerStyle={styles.lines}>
-              <Output lines={lines} t={t} />
+              <Output lines={lines.filter(troubling)} t={t} />
             </ScrollView>
           )}
         </>
