@@ -104,6 +104,8 @@ export type Settings = {
   background: boolean;
   /** Offer to set reminders, timers and events, start messages and calls, and read the calendar when asked. */
   assistant: boolean;
+  /** Short, practical answers that are easy on the battery, for when something has gone wrong. */
+  emergency: boolean;
   memoryOn: boolean;
   autoMemory: boolean;
   autoSummary: boolean;
@@ -129,6 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lookup: false,
   background: true,
   assistant: true,
+  emergency: false,
   memoryOn: true,
   autoMemory: true,
   autoSummary: true,

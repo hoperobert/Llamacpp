@@ -133,10 +133,29 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
   much of it as fits goes to the model with the question. A model that cannot
   look at photos is given the words read out of one (a page, a sign, a
   screenshot), so every model can be asked about a photo of text.
-- **Code runs on the phone.** A JavaScript block in a reply has a Run button
-  and an HTML one has Preview. The code runs in a web view of its own, shut
-  away from the app and its files and with no internet. What it prints, or the
-  error it stops on, can be sent back to the model in one tap to be fixed.
+- **Code runs on the phone.** A JavaScript or Python block in a reply has a
+  Run button and an HTML one has Preview. The code runs in a web view of its
+  own, shut away from the app and its files and with no internet. What it
+  prints, or the error it stops on, can be sent back to the model in one tap
+  to be fixed. Python needs its runtime (Pyodide, 14 MB) fetched once; after
+  that it runs offline like the rest. A web view will not load a program
+  straight from a file, so the app's native module hands the runtime's folder
+  to it over the phone's own internal address.
+- **Tools.** Anything run can be saved by name. A saved tool opens from Tools
+  with no internet, keeps what it stores (its `localStorage` is held by the
+  app), and can be changed by asking: its code goes back into the chat and the
+  new version takes its place. `/tool a tip calculator` asks for one in the
+  form the app can keep. Tools can ask the phone where it is, for its battery,
+  torch and voice (`pocket.phone('location')`).
+- **Emergencies.** The Emergency screen works with no model, no library and no
+  signal: torch, SOS flashed in Morse, a loud alarm that sounds with the
+  ringer off, the screen as a lamp, where the phone is from GPS (to copy or
+  send), and first aid and survival steps that are part of the app
+  (`src/lib/firstaid.ts`). A question that is plainly about one of those is
+  answered from the app's own steps, not from what a small model remembers.
+  Emergency mode makes replies short and practical, with the most important
+  thing first, and turns the screen dark. "Ready with no internet?" lists
+  what is on the phone and fetches what is not.
 - **Projects** group chats that share instructions.
 - **Incognito chats** are never saved, named or used for memories.
 - **Any message** you sent can be taken back and changed.
@@ -264,6 +283,11 @@ patch does.
 | `src/lib/actions.ts` | Doing it: Reminders, Calendar, Messages, Mail, Phone, Maps, Contacts, Location. |
 | `src/lib/notify.ts` | Notifications: a reply that finished or paused while the app was away. |
 | `src/lib/runner.ts` | Running code a model wrote: what can be run, and the page that runs it. |
+| `src/lib/python.ts` | Python's runtime: fetching it once and handing it to the web view. |
+| `src/lib/phone.ts` | What the phone can tell or do with no signal: GPS, compass, battery, torch, alarm. |
+| `src/lib/firstaid.ts` | First aid and survival steps that are part of the app. |
+| `src/lib/mode.ts` | Emergency mode: what it changes about replies. |
+| `modules/pocket-native/` | The app's own Swift: background time, PDF and photo text, torch, alarm, files for the web view. |
 | `src/lib/storage.ts` | Settings and other small preferences. |
 | `src/ui/` | Shared pieces: messages, the message box, lists, Markdown, icons. |
 

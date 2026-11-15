@@ -14,6 +14,7 @@ import * as Updates from 'expo-updates';
 
 import { NOT_ALLOWED, perform, read } from './actions';
 import { describeAction, findAction, findLookup, type Action } from './assistant';
+import { cardsFor, cardText } from './firstaid';
 import { asRequest, lastCode, onOrOff, parseCommand, subjectOf, type Command } from './commands';
 import { bestContext, DEFAULT_KV_KB, kvKBPerToken, trainedContext } from './context';
 import { freeDiskMB, ramMB } from './device';
@@ -31,6 +32,7 @@ import {
   addText, libraryFiles, libraryReady, lookup, prepare, removeSource, removeText, restoreLibrary, SOURCES,
   sourceDownload, sourceForDownload, type LibraryFile, type Source, type SourceState,
 } from './library';
+import { inForce } from './mode';
 import { fit, formatMB, modelFromUrl, MODELS, visionAddon, type Model } from './models';
 import { askToNotify, clearNotifications, notify, setUpNotifications } from './notify';
 import {
@@ -43,7 +45,7 @@ import {
 import { installPython, pythonReady, removePython } from './python';
 import { runnable, type Runnable } from './runner';
 import {
-  asks, fileText, FROM_PHONE, FROM_PHOTO, referenceText, worthLookingUp, worthUsing, type Passage,
+  asks, fileText, FIRST_AID, FROM_PHONE, FROM_PHOTO, referenceText, worthLookingUp, worthUsing, type Passage,
 } from './retrieval';
 import { describeClose, type Session } from './session';
 import { createStore } from './store';
@@ -155,7 +157,7 @@ export const findProject = (id?: string) => app.get().projects.find((p) => p.id 
 /** What the model is given alongside a chat's messages. An incognito chat gets no memories. */
 function contextFor(chat: Chat) {
   const { settings, memories } = app.get();
-  return { settings, memories: chat.incognito ? [] : memories, project: findProject(chat.projectId) };
+  return { settings: inForce(settings), memories: chat.incognito ? [] : memories, project: findProject(chat.projectId) };
 }
 
 // ---------- small helpers ----------
@@ -1056,8 +1058,14 @@ export async function send(text: string, photo: string | null = null, file: Stat
       sources: [words ? 'Text in the photo' : 'No text found in the photo'],
     };
   } else if (!photo) {
-    // A question that comes with a photo is about the photo, not about the words in it.
-    found = await lookUp(subject, chat);
+    const cards = typed ? [] : cardsFor(text);
+    if (cards.length) {
+      // Plainly a first aid question: the model answers from the app's own steps, not from memory.
+      found = { context: `${FIRST_AID}\n\n${cards.map(cardText).join('\n\n')}`, sources: cards.map((c) => `First aid: ${c.title}`) };
+    } else {
+      // A question that comes with a photo is about the photo, not about the words in it.
+      found = await lookUp(subject, chat);
+    }
   }
   // Reading the phone can mean answering a question from iOS first. The chat may have moved on meanwhile.
   const current = app.get().chat.id === chat.id ? app.get().chat : chat;
@@ -1132,7 +1140,7 @@ export async function answerInstead(id: string | undefined) {
  * Returns what to keep with the message: the passages for the model, and their titles to show.
  */
 async function lookUp(text: string, chat: Chat): Promise<{ context?: string; sources?: string[] }> {
-  if (!app.get().settings.lookup || !libraryReady() || !worthLookingUp(text)) return {};
+  if (!inForce(app.get().settings).lookup || !libraryReady() || !worthLookingUp(text)) return {};
   // A short follow-up ("how tall is it?") only makes sense with the question before it.
   const before = [...chat.messages].reverse().find((m) => m.role === 'user');
   const followUp = text.split(/\s+/).length < 6;
@@ -1558,6 +1566,8 @@ export function runCommand(command: Command, arg: string) {
     case 'chats': router.push('/chats'); break;
     case 'projects': router.push('/projects'); break;
     case 'library': router.push('/library'); break;
+    case 'tools': router.push('/tools'); break;
+    case 'emergency': router.push('/emergency'); break;
     case 'settings': router.push('/settings'); break;
     // Typing a slash is what lists the commands.
     case 'help': app.set({ draft: '/' }); break;

@@ -190,7 +190,9 @@ assert.equal(runnable('html', '<p>hi</p>'), 'page');
 assert.equal(runnable('svg', '<svg></svg>'), 'page');
 assert.equal(runnable('', '<!DOCTYPE html>\n<html></html>'), 'page');
 assert.equal(runnable('', 'console.log(1)'), null);                 // no language named: not guessed at
-assert.equal(runnable('python', 'print(1)'), null);
+assert.equal(runnable('python', 'print(1)'), 'python');
+assert.equal(runnable('py', 'print(1)'), 'python');
+assert.equal(runnable('ruby', 'puts 1'), null);
 assert.equal(runnable('ts', 'const a: number = 1'), null);
 assert.equal(runnable('js', '   '), null);
 // Code that mentions "</script>" must not end the script it is carried in.
@@ -212,6 +214,16 @@ assert.equal(reportFor([]), 'I ran the code. It printed nothing.');
 const broke = [{ kind: 'error', text: 'ReferenceError: x is not defined' }];
 assert.equal(failed(broke), true);
 assert.ok(reportFor(broke).startsWith('I ran the code and it went wrong. Fix it.'));
+// What a saved tool stored is handed back to it, whatever is in it.
+const { pythonPage, PYTHON_FILES, PYTHON_MB } = await import('../src/lib/runner.ts');
+const stored = runnerPage('page', '<p>hi</p>', { note: 'it\'s </script> "quoted"', n: '5' });
+assert.ok(stored.includes('window.__pocketData = JSON.parse('));
+assert.equal(stored.split('</script>').length, 3);                  // the stored data's and the bridge's, no more
+assert.ok(!runnerPage('page', '<p>hi</p>').includes('__pocketData = JSON'));
+// Python's page may fetch from its own folder and nowhere else.
+assert.ok(pythonPage().includes("connect-src 'self'") && pythonPage().includes("import { loadPyodide } from './pyodide.mjs'"));
+assert.equal(PYTHON_FILES.length, 5);
+assert.equal(PYTHON_MB, 14);
 console.log('running code: all checks passed');
 
 // ---------- files and photo text given to the model ----------
@@ -248,3 +260,33 @@ assert.equal(asRequest('plan', 'a trip'), null);
 assert.deepEqual(lastCode('First:\n```js\nconsole.log(1)\n```\nThen:\n```html\n<p>hi</p>\n```\nDone.'), { lang: 'html', code: '<p>hi</p>' });
 assert.equal(lastCode('No code here.'), null);
 console.log('phone commands: all checks passed');
+
+// ---------- first aid ----------
+const { cardsFor, cardText, CARDS } = await import('../src/lib/firstaid.ts');
+const ids = (question) => cardsFor(question).map((c) => c.id);
+assert.deepEqual(ids('My friend is choking what do I do'), ['choking']);
+assert.deepEqual(ids("He collapsed and he's not breathing"), ['cpr', 'recovery']);
+assert.deepEqual(ids('the baby is not breathing'), ['cpr-child']);
+assert.deepEqual(ids('I burned my hand on the stove'), ['burns']);
+assert.deepEqual(ids("She's bleeding badly from her leg"), ['bleeding']);
+assert.deepEqual(ids('I think dad is having a stroke'), ['stroke']);
+assert.deepEqual(ids('how do I purify water'), ['water']);
+assert.deepEqual(ids("we're lost and there is no signal"), ['calling', 'signal']);
+// Ordinary questions are left alone.
+for (const question of ['Write a poem about the sea', 'How do vaccines work?', 'Explain the stock market', 'What is the capital of France?', 'my code is broken']) {
+  assert.deepEqual(ids(question), [], question);
+}
+assert.ok(cardText(CARDS[0]).startsWith('Not breathing (CPR)\nSigns: '));
+assert.ok(cardText(CARDS[0]).includes('\n1. Call 999 or 112'));
+assert.equal(new Set(CARDS.map((c) => c.id)).size, CARDS.length);
+// Emergency mode changes how replies are written, whatever the usual settings.
+const { inForce, EMERGENCY } = await import('../src/lib/mode.ts');
+const usual = { emergency: false, thinking: true, lookup: false, maxTokens: 3072, style: 'explain', temperature: 0.7 };
+assert.equal(inForce(usual), usual);
+const urgent = inForce({ ...usual, emergency: true });
+assert.deepEqual([urgent.thinking, urgent.lookup, urgent.maxTokens, urgent.style, urgent.temperature], [false, true, 400, 'concise', 0.4]);
+assert.ok(EMERGENCY.includes('most important action first'));
+// A request for a tool is written out with what makes it something the app can run and keep.
+const { expandCommand: written } = await import('../src/lib/commands.ts');
+assert.ok(written('/tool a tip calculator').includes('single ```html block') && written('/tool a tip calculator').endsWith('The tool: a tip calculator'));
+console.log('emergencies: all checks passed');

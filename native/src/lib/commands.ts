@@ -6,6 +6,8 @@
 //
 // Nothing here touches the phone, so the tests use it as it is.
 
+import { TOOL_BRIEF } from './runner';
+
 export type Command = {
   name: string;
   /** Other names that do the same. */
@@ -97,6 +99,11 @@ export const COMMANDS: Command[] = [
     prompt: { with: after('Correct the spelling, grammar and punctuation of the following. Change nothing else. Reply with the corrected text only.') },
   },
 
+  {
+    name: 'tool', aliases: ['build', 'app'], hint: 'Build a tool to keep', takes: 'what it should do',
+    prompt: { with: (arg) => `${TOOL_BRIEF}\n\nThe tool: ${arg}` },
+  },
+
   // ---------- on this iPhone ----------
   { name: 'remind', aliases: ['reminder'], hint: 'Set a reminder', takes: 'what, and when' },
   { name: 'timer', hint: 'Start a timer', takes: 'how long' },
@@ -135,6 +142,8 @@ export const COMMANDS: Command[] = [
   { name: 'chats', aliases: ['resume'], hint: 'Your chats' },
   { name: 'projects', hint: 'Your projects' },
   { name: 'library', hint: 'The offline library' },
+  { name: 'tools', hint: 'What you have kept' },
+  { name: 'emergency', aliases: ['sos', 'firstaid'], hint: 'Light, alarm, location, first aid' },
   { name: 'settings', aliases: ['config'], hint: 'Settings' },
   { name: 'help', hint: 'Show every command' },
 ];

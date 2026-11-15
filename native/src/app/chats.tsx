@@ -155,6 +155,8 @@ export default function ChatsMenu() {
         <Link t={t} icon="eye.slash" label="Incognito chat" onPress={() => start({ incognito: true })} />
         <Link t={t} icon="folder" label="Projects" onPress={() => close(() => router.push('/projects'))} />
         <Link t={t} icon="books.vertical" label="Library" onPress={() => close(() => router.push('/library'))} />
+        <Link t={t} icon="wrench.and.screwdriver" label="Tools" onPress={() => close(() => router.push('/tools'))} />
+        <Link t={t} icon="cross.case" label="Emergency" onPress={() => close(() => router.push('/emergency'))} />
 
         <SectionList
           sections={sections}

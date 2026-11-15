@@ -55,7 +55,9 @@ export function useTheme(): Theme {
   const system = useColorScheme();
   const choice = app.use((s) => s.settings.theme);
   const textSize = app.use((s) => s.settings.textSize);
-  const isDark = (choice === 'auto' ? system : choice) === 'dark';
+  // Emergency mode is dark whatever the theme: a dark screen costs the battery least.
+  const emergency = app.use((s) => s.settings.emergency);
+  const isDark = emergency || (choice === 'auto' ? system : choice) === 'dark';
   // The same object while nothing changes, so memoised rows are not redrawn.
   return useMemo(() => ({ c: isDark ? dark : light, size: SIZES[textSize] }), [isDark, textSize]);
 }

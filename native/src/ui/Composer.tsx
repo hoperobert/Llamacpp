@@ -43,7 +43,8 @@ export function Composer({ t, onHeight }: { t: Theme; onHeight: (height: number)
   const goal = app.use((s) => !!s.chat.goal);
   // What is switched on, shown quietly next to the model's name.
   const lookingUp = app.use((s) => s.settings.lookup && (s.libraryFiles.length > 0 || Object.values(s.library).some((l) => l.status === 'ready')));
-  const extras = [goal ? 'Goal' : '', thinking ? 'Think' : '', lookingUp ? 'Look up' : '', styleId !== 'normal' ? STYLES.find((s) => s.id === styleId)?.label : '']
+  const emergency = app.use((s) => s.settings.emergency);
+  const extras = [emergency ? 'Emergency' : '', goal ? 'Goal' : '', thinking && !emergency ? 'Think' : '', lookingUp ? 'Look up' : '', styleId !== 'normal' ? STYLES.find((s) => s.id === styleId)?.label : '']
     .filter(Boolean).join(' · ');
 
   const ready = engine.status === 'ready';

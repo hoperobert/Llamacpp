@@ -2,6 +2,7 @@
 
 import { expandCommand, subjectOf } from './commands';
 import * as engine from './engine';
+import { EMERGENCY } from './mode';
 import { newId, STYLES, type Chat, type Memory, type Project, type Settings } from './storage';
 import { withReferences } from './retrieval';
 import { cleanTitle, takingTurns, withoutThinking } from './text';
@@ -20,7 +21,8 @@ export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[],
     'The user can run JavaScript, and open HTML pages, that you write in code blocks on this device.',
   ];
   const style = STYLES.find((s) => s.id === settings.style)?.prompt;
-  if (style) parts.push(style);
+  if (settings.emergency) parts.push(EMERGENCY);
+  else if (style) parts.push(style);
   if (settings.instructions.trim()) {
     parts.push(`Follow these instructions from the user:\n${settings.instructions.trim()}`);
   }
