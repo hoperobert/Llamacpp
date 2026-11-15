@@ -59,6 +59,10 @@ export default function SettingsScreen() {
             options={[{ label: 'Short', value: 256 }, { label: 'Medium', value: 768 }, { label: 'Long', value: 1536 }, { label: 'Max', value: 3072 }]}
           />
           <SwitchRow t={t} title="Think first" value={settings.thinking} onChange={(thinking) => changeSettings({ thinking })} />
+          <SwitchRow
+            t={t} title="Finish in the background"
+            value={settings.background} onChange={(background) => changeSettings({ background })}
+          />
         </Section>
 
         <Section t={t} title="Context">

@@ -7,14 +7,20 @@ import { splitThinking } from './text';
 
 let context: LlamaContext | null = null;
 let vision = false;
+/** Whether the loaded model was put on the GPU. Off the GPU it is slower, but may run in the background. */
+let onGPU = true;
 /** Set when whatever the model was doing was told to stop. */
 let cut = false;
 
 /**
  * iOS closes an app that uses the GPU in the background. So nothing is asked of
- * the model unless the app is on screen, and this is the one place that checks.
+ * a model on the GPU unless the app is on screen, and this is the one place
+ * that checks. A model loaded on the processor alone may run at any time.
  */
-const onScreen = () => AppState.currentState === 'active';
+const onScreen = () => AppState.currentState === 'active' || !onGPU;
+
+/** True for a model on the GPU: one that must stop when the app leaves the screen. */
+export const usesGPU = () => onGPU;
 
 /** The model was not asked, because the app is off screen, or its answer was cut short and is no use. */
 export class Interrupted extends Error {
@@ -57,11 +63,14 @@ export async function loadModel(
   nCtx: number,
   onProgress: (fraction: number) => void,
   projectorUri?: string,
+  /** Keep it off the GPU. Slower, but iOS lets it run while the app is in the background. */
+  cpu = false,
 ): Promise<{ gpu: boolean; vision: boolean }> {
   await unloadModel();
+  onGPU = !cpu;
   context = await initLlama(
     {
-      model: uri, n_ctx: nCtx, n_batch: 512, n_gpu_layers: 99,
+      model: uri, n_ctx: nCtx, n_batch: 512, n_gpu_layers: cpu ? 0 : 99,
       // The model is mapped from its file and never pinned, so iOS can page it
       // out when the app is in the background instead of closing the app.
       use_mmap: true, use_mlock: false,
@@ -72,7 +81,7 @@ export async function loadModel(
   );
   if (projectorUri) {
     try {
-      vision = await context.initMultimodal({ path: projectorUri, use_gpu: true });
+      vision = await context.initMultimodal({ path: projectorUri, use_gpu: !cpu });
     } catch {
       vision = false;
     }

@@ -75,6 +75,8 @@ export type Settings = {
   thinking: boolean;
   /** Look things up in the offline library before answering. */
   lookup: boolean;
+  /** Finish a reply after the app leaves the screen, when iOS allows the time. */
+  background: boolean;
   memoryOn: boolean;
   autoMemory: boolean;
   autoSummary: boolean;
@@ -98,6 +100,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoContext: true,
   thinking: false,
   lookup: false,
+  background: true,
   memoryOn: true,
   autoMemory: true,
   autoSummary: true,

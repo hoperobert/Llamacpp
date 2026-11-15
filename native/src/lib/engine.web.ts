@@ -38,10 +38,14 @@ def immune(memory, germ):
 
 Read more at https://example.com or use \`inline code\`.`;
 
+let onGPU = true;
+export const usesGPU = () => onGPU;
+
 export async function loadModel(
-  _uri: string, _nCtx: number, onProgress: (fraction: number) => void, projectorUri?: string,
+  _uri: string, _nCtx: number, onProgress: (fraction: number) => void, projectorUri?: string, cpu = false,
 ) {
   loaded = false;
+  onGPU = !cpu;
   for (let i = 1; i <= 10; i++) {
     await wait(120);
     onProgress(i / 10);

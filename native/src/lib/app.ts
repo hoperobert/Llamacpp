@@ -28,6 +28,10 @@ import {
   sourceDownload, sourceForDownload, type LibraryFile, type Source, type SourceState,
 } from './library';
 import { fit, formatMB, modelFromUrl, MODELS, visionAddon, type Model } from './models';
+import { askToNotify, clearNotifications, notify, setUpNotifications } from './notify';
+import {
+  backgroundProgress, beginBackgroundWork, endBackgroundWork, hasNative, onBackgroundExpire,
+} from '../../modules/pocket-native';
 import {
   blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store, STYLES,
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
@@ -355,6 +359,8 @@ export async function start() {
   const preferred = findModel(settings.modelId);
   if (preferred && downloaded[preferred.id] && settings.loadedOnce && !marker) loadWhenOnScreen(preferred);
 
+  setUpNotifications((chatId) => { if (app.get().chat.id !== chatId) openChat(chatId); });
+  onBackgroundExpire(timeIsUp);
   AppState.addEventListener('change', onAppState);
   AppState.addEventListener('memoryWarning', () => note({ warnings: session.warnings + 1 }));
   // A download that stopped because the connection dropped carries on when it comes back.
@@ -390,6 +396,99 @@ let loadWhenActive: Model | null = null;
 let resumeTurn: { chatId: string; userText: string | null; carryOn?: boolean } | null = null;
 
 const PAUSED = 'Paused when you left the app.';
+
+/**
+ * Time iOS has granted to finish the reply being written if the app leaves the
+ * screen: until it is done ("continued", iOS 26), about half a minute
+ * ("short"), or none. It is asked for when a reply starts and given back when
+ * it ends.
+ */
+let allowance: 'continued' | 'short' | 'none' = 'none';
+
+/**
+ * Whether a reply can be written right now. On screen, always. Off screen,
+ * only with the model moved off the GPU (iOS closes an app that uses the GPU
+ * in the background) and with time granted.
+ */
+const canWrite = () =>
+  AppState.currentState === 'active' || (!engine.usesGPU() && allowance !== 'none');
+
+function giveBackAllowance(finished: boolean) {
+  if (allowance === 'none') return;
+  allowance = 'none';
+  endBackgroundWork(finished);
+}
+
+/** iOS says the time is up, or the user stopped it from the Lock Screen: stop writing and keep what there is. */
+function timeIsUp() {
+  if (allowance === 'none') return;
+  const { busy } = app.get();
+  // A reply is unfinished: being written, or about to be carried on.
+  if ((busy || resumeTurn) && AppState.currentState !== 'active') {
+    if (busy) {
+      interrupted = PAUSED;
+      engine.stop();
+    }
+    notify('Reply paused', 'Open Pocket LLM and it carries on from where it stopped.', app.get().chat.id);
+  }
+  // On screen the reply needs no allowance. It simply carries on.
+  giveBackAllowance(false);
+}
+
+let moving = false;
+
+/**
+ * Moves the loaded model between the GPU and the processor. On the processor
+ * it is slower, but iOS lets it run while the app is in the background.
+ * Nothing on screen changes: the model stays the one that is loaded.
+ */
+async function moveEngine(cpu: boolean): Promise<boolean> {
+  const wanted = app.get().engine.modelId;
+  return withEngine(async () => {
+    const { engine: state, downloaded, settings } = app.get();
+    const model = findModel(state.modelId);
+    if (!model || state.status !== 'ready' || state.modelId !== wanted) return false;
+    if (engine.usesGPU() === !cpu) return true;
+    // The GPU may only be touched while the app is on screen.
+    if (!cpu && AppState.currentState !== 'active') return false;
+    const what = cpu ? 'moving the model off the GPU' : 'moving the model back to the GPU';
+    doing(what, true);
+    try {
+      // The part that looks at photos stays with the GPU.
+      const addon = visionAddon(model);
+      const projector = !cpu && addon && downloaded[addon.id] ? modelUri(addon) : undefined;
+      await engine.loadModel(modelUri(model), settings.nCtx, () => {}, projector, cpu);
+      return true;
+    } catch (e) {
+      app.set({
+        engine: { ...NO_ENGINE, modelId: model.id, error: `Could not load this model. ${String((e as Error)?.message ?? e)}` },
+      });
+      return false;
+    } finally {
+      doing(what, false);
+    }
+  });
+}
+
+/** Back on the GPU once the app is on screen again. Queued behind whatever the model is doing. */
+function backToGPU() {
+  if (!engine.usesGPU() && AppState.currentState === 'active') moveEngine(false);
+}
+
+/**
+ * The app has left the screen with a reply unfinished and time granted to
+ * finish it: move the model off the GPU and carry on writing there.
+ */
+async function carryOnInBackground() {
+  const { chat, settings, engine: state } = app.get();
+  if (moving || allowance === 'none' || !settings.background || state.status !== 'ready' || !engine.usesGPU()) return;
+  // A reply about a photo cannot be picked up part-way. It waits for the app to come back.
+  if (chat.messages.slice(chat.cut).some((m) => m.image)) return;
+  moving = true;
+  const moved = await moveEngine(true);
+  moving = false;
+  if (moved) resumeIfWaiting();
+}
 
 /** What the app is doing right now, saved as it changes. See session.ts. */
 let session: Session = { phase: 'active', since: Date.now(), doing: [], model: null, warnings: 0 };
@@ -429,8 +528,11 @@ function appStateChanged(next: string) {
     // iOS closes an app that is still using the GPU when it reaches the
     // background, and the warning for that can arrive too late. So stop as
     // soon as the app starts to leave the screen, and keep what was written.
-    if (app.get().busy) interrupted = PAUSED;
-    engine.stop();
+    // A model already moved off the GPU is left to finish what it is writing.
+    if (engine.usesGPU()) {
+      if (app.get().busy) interrupted = PAUSED;
+      engine.stop();
+    }
     Speech.stop().catch(() => {});
     if (session.phase === 'active') note({ phase: next, since: Date.now(), warnings: 0 });
     else note({ phase: next });
@@ -438,8 +540,13 @@ function appStateChanged(next: string) {
     // the app to make room for others; note the chat, to come back to it then.
     const { chat } = app.get();
     store.setLastOpen(chat.messages.length && !chat.incognito ? { chatId: chat.id, at: Date.now() } : null);
+    // Fully off screen: a reply cut short just now is carried on there if iOS allows the time.
+    if (next === 'background') resumeIfWaiting();
   } else if (next === 'active') {
     note({ phase: next, since: Date.now() });
+    clearNotifications();
+    // A model that was writing in the background goes back to the GPU, unless it is still writing.
+    if (!app.get().busy) backToGPU();
     takeUpdateOnReturn();
     resumeFailedDownloads();
     const model = loadWhenActive;
@@ -457,7 +564,11 @@ function appStateChanged(next: string) {
 function resumeIfWaiting() {
   const turn = resumeTurn;
   const { chat, busy } = app.get();
-  if (!turn || busy || AppState.currentState !== 'active') return;
+  if (!turn || busy) return;
+  if (!canWrite()) {
+    if (AppState.currentState === 'background') carryOnInBackground();
+    return;
+  }
   resumeTurn = null;
   if (chat.id !== turn.chatId) return;
   const last = chat.messages.at(-1);
@@ -711,7 +822,7 @@ async function runTurn(userText: string | null, carryOn?: Message) {
   stoppedByUser = false;
   interrupted = '';
   const chatId = app.get().chat.id;
-  if (AppState.currentState !== 'active') {
+  if (!canWrite()) {
     // Sent just as the app was left. The reply is written on return.
     resumeTurn = { chatId, userText, carryOn: !!carryOn };
     return;
@@ -725,6 +836,11 @@ async function runTurn(userText: string | null, carryOn?: Message) {
   app.set({ busy: true, live: message });
   doing('writing a reply', true);
   await activateKeepAwakeAsync('chat').catch(() => {});
+  if (app.get().settings.background && hasNative && allowance === 'none' && AppState.currentState === 'active') {
+    // Asked for now, while the app is on screen: iOS does not grant it to an app that has already left.
+    askToNotify();
+    allowance = await beginBackgroundWork('Writing a reply', app.get().chat.title || 'Pocket LLM');
+  }
 
   await withEngine(async () => {
     const current = () => app.get().chat;
@@ -735,11 +851,13 @@ async function runTurn(userText: string | null, carryOn?: Message) {
         app.set({ status: 'Summarising earlier messages…' });
         const roomier = await ensureRoom(current(), settings, memories, project);
         // A summary cut short by leaving the app must not replace the messages it stands for.
-        if (stoppedByUser || AppState.currentState !== 'active') throw new engine.Interrupted();
+        if (stoppedByUser || !canWrite()) throw new engine.Interrupted();
         await saveChat(roomier);
         app.set({ status: '' });
       }
+      const budget = { temperature: settings.temperature, maxTokens: replyBudget(settings) };
       let lastPaint = 0;
+      let lastProgress = 0;
       const paint = () => {
         // Repainting on every token is wasteful; a few times a second reads the same.
         const now = Date.now();
@@ -747,8 +865,12 @@ async function runTurn(userText: string | null, carryOn?: Message) {
           lastPaint = now;
           app.set({ live: { ...message } });
         }
+        if (allowance === 'continued' && now - lastProgress > 1000) {
+          // iOS shows how far along the reply is, and stops work that does not seem to be getting anywhere.
+          lastProgress = now;
+          backgroundProgress(Math.min(0.95, message.content.length / (budget.maxTokens * 3.5)));
+        }
       };
-      const budget = { temperature: settings.temperature, maxTokens: replyBudget(settings) };
       const prompt = promptMessages(current(), settings, memories, project);
       let result: { content: string; reasoning?: string; timings: engine.Timings };
       if (carryOn) {
@@ -805,11 +927,21 @@ async function runTurn(userText: string | null, carryOn?: Message) {
   doing('writing a reply', false);
   app.set({ busy: false });
   if (resumeTurn) {
-    // Cut off by leaving. If the app is already back, start again now; otherwise when it returns.
+    // Cut off by leaving. If the app is already back, start again now. If it is fully
+    // off screen and iOS allows the time, carry on there. Otherwise when it returns.
     resumeIfWaiting();
     return;
   }
   if (!stoppedByUser && !interrupted) haptic('success');
+  if (AppState.currentState !== 'active' && !stoppedByUser && !interrupted && app.get().chat.id === chatId) {
+    // Finished while the app was away.
+    const reply = app.get().chat.messages.at(-1);
+    if (reply?.role === 'assistant' && reply.content) {
+      notify(app.get().chat.title || 'Reply ready', reply.content.replace(/\s+/g, ' ').slice(0, 140), chatId);
+    }
+  }
+  giveBackAllowance(true);
+  backToGPU();
 
   // Side jobs wait if the chat is long. See flushSideJobs.
   const { chat, queued } = app.get();
