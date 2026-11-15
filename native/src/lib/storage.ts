@@ -145,6 +145,10 @@ export const store = {
   setLastOpen: (value: { chatId: string; at: number } | null) =>
     value ? write('lastOpen', value) : AsyncStorage.removeItem('lastOpen').catch(() => {}),
 
+  /** The last error nothing caught, for the bottom of Settings. */
+  lastError: () => read<{ at: number; text: string } | null>('lastError', null),
+  setLastError: (value: { at: number; text: string }) => write('lastError', value),
+
   /** What the app was doing, for working out afterwards why it closed. See session.ts. */
   session: () => read<Session | null>('session', null),
   setSession: (value: Session) => write('session', value),

@@ -90,7 +90,15 @@ export const isLoaded = () => context !== null;
 
 export function stop() {
   cut = true;
-  context?.stopCompletion().catch(() => {});
+  // The engine says this gives back a promise. It gives back nothing, so
+  // calling .catch on the result threw, and an error thrown here (it runs
+  // every time the app leaves the screen) closes the app. Nothing it returns
+  // is needed, and nothing it throws may escape.
+  try {
+    void context?.stopCompletion();
+  } catch {
+    // Stopping is best effort.
+  }
 }
 
 /** Streams a reply. `onUpdate` receives the full text so far, not a delta. */

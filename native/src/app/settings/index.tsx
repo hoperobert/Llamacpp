@@ -20,6 +20,7 @@ export default function SettingsScreen() {
   const engine = app.use((s) => s.engine);
   const chatCount = app.use((s) => s.chatList.length);
   const lastClose = app.use((s) => s.lastClose);
+  const lastError = app.use((s) => s.lastError);
   const model = findModel(engine.modelId);
 
   return (
@@ -107,6 +108,11 @@ export default function SettingsScreen() {
           ].filter(Boolean).join(' · ')}
         </Text>
         {!!lastClose && <Text style={[styles.about, styles.lastClose, { color: t.c.tertiary }]}>{lastClose}</Text>}
+        {!!lastError && (
+          <Text selectable numberOfLines={6} style={[styles.about, styles.lastClose, { color: t.c.tertiary }]}>
+            Last error: {lastError}
+          </Text>
+        )}
       </ScrollView>
     </>
   );

@@ -75,6 +75,8 @@ type State = {
   crashed: boolean;
   /** How the last run of the app ended, for the bottom of Settings. */
   lastClose: string;
+  /** The last error nothing caught. */
+  lastError: string;
   toast: string;
   speakingId: string | null;
 };
@@ -102,6 +104,7 @@ export const app = createStore<State>({
   attachment: null,
   crashed: false,
   lastClose: '',
+  lastError: '',
   toast: '',
   speakingId: null,
 });
@@ -205,18 +208,36 @@ async function takeUpdate() {
   }
 }
 
+/**
+ * An error that nothing catches closes the app on an iPhone. Almost none are
+ * worth that: the app can carry on, and the error is kept so it can be seen at
+ * the bottom of Settings and put right.
+ */
+function keepGoingAfterErrors() {
+  const errors = (globalThis as {
+    ErrorUtils?: { setGlobalHandler: (handler: (error: unknown, fatal?: boolean) => void) => void };
+  }).ErrorUtils;
+  errors?.setGlobalHandler((error) => {
+    const text = String((error as Error)?.stack ?? (error as Error)?.message ?? error).slice(0, 600);
+    console.warn('Uncaught error', text);
+    app.set({ lastError: text });
+    store.setLastError({ at: Date.now(), text });
+  });
+}
+
 let started = false;
 
 export async function start() {
   if (started) return;
   started = true;
+  keepGoingAfterErrors();
   const updated = takeUpdate();
 
   const [savedSettings, memories, chatList, marker, customModels, projects, previous] = await Promise.all([
     store.settings(), memoryStore.all(), store.chatList(), store.loadMarker(), store.customModels(),
     store.projects(), store.session(),
   ]);
-  app.set({ lastClose: describeClose(previous, Date.now()) });
+  app.set({ lastClose: describeClose(previous, Date.now()), lastError: (await store.lastError())?.text ?? '' });
   note({ phase: AppState.currentState ?? 'active', since: Date.now() });
   const settings = savedSettings;
   // A marker left behind means the last load took the app down, most likely
@@ -352,6 +373,15 @@ function loadWhenOnScreen(model: Model) {
 }
 
 function onAppState(next: string) {
+  try {
+    appStateChanged(next);
+  } catch (error) {
+    // Nothing that happens as the app comes and goes is worth closing it for.
+    console.warn('App state', error);
+  }
+}
+
+function appStateChanged(next: string) {
   if (next === 'inactive' || next === 'background') {
     // iOS closes an app that is still using the GPU when it reaches the
     // background, and the warning for that can arrive too late. So stop as
