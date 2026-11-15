@@ -72,6 +72,7 @@ export default function ChatScreen() {
     <View style={[styles.flex, { backgroundColor: t.c.bg }]}>
       <Stack.Screen
         options={{
+          headerShown: flags.header,
           headerTransparent: flags.transparentHeader,
           scrollEdgeEffects: flags.edges === 'hidden' ? HIDDEN_EDGES : undefined,
         }}
@@ -102,6 +103,9 @@ export default function ChatScreen() {
               : { paddingTop: top + 8, paddingBottom: composerHeight + 6 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
+            {...(flags.plainInsets
+              ? { contentInsetAdjustmentBehavior: 'never' as const, automaticallyAdjustsScrollIndicatorInsets: false, automaticallyAdjustContentInsets: false }
+              : {})}
             onScroll={(e) => setScrolledUp(e.nativeEvent.contentOffset.y > 240)}
             scrollEventThrottle={64}
             initialNumToRender={12}
@@ -110,21 +114,25 @@ export default function ChatScreen() {
           />
         )}
 
+        {flags.overlays && (
+          <>
         {/* Always there and only shown when wanted, so that nothing is added to or taken from the screen as it moves. */}
-        <Pressable
-          onPress={() => list.current?.scrollToOffset({ offset: 0, animated: true })}
-          accessibilityRole="button"
-          accessibilityLabel="Scroll to the latest message"
-          accessibilityElementsHidden={!showJump}
-          pointerEvents={showJump ? 'auto' : 'none'}
-          style={[styles.jump, { bottom: composerHeight + 8, opacity: showJump ? 1 : 0 }]}
-        >
-          <Glass c={t.c} interactive style={styles.jumpGlass}>
-            <Icon name="arrow.down" size={18} color={t.c.text} weight="semibold" />
-          </Glass>
-        </Pressable>
-        <Toast bottom={composerHeight + 10} />
-        <Composer t={t} onHeight={setComposerHeight} />
+          <Pressable
+            onPress={() => list.current?.scrollToOffset({ offset: 0, animated: true })}
+            accessibilityRole="button"
+            accessibilityLabel="Scroll to the latest message"
+            accessibilityElementsHidden={!showJump}
+            pointerEvents={showJump ? 'auto' : 'none'}
+            style={[styles.jump, { bottom: composerHeight + 8, opacity: showJump ? 1 : 0 }]}
+          >
+            <Glass c={t.c} interactive style={styles.jumpGlass}>
+              <Icon name="arrow.down" size={18} color={t.c.text} weight="semibold" />
+            </Glass>
+          </Pressable>
+          <Toast bottom={composerHeight + 10} />
+          </>
+        )}
+        {flags.composer && <Composer t={t} onHeight={setComposerHeight} />}
         </View>
       </Animated.View>
       {/* On iOS 26 the system softens what scrolls under the header by itself. This is for everything else. */}

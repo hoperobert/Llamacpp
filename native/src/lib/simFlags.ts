@@ -11,6 +11,17 @@ export type SimFlags = {
   inverted: boolean;
   /** Whether the message box and the button for jumping to the latest message are glass. */
   glass: boolean;
+  /** Whether the screen has the system's header at all. */
+  header: boolean;
+  /** Whether the pieces that float over the chat (jump button, toast) are there. */
+  overlays: boolean;
+  /** Whether the message box is there. */
+  composer: boolean;
+  /** Whether the list is told to leave its own insets alone. */
+  plainInsets: boolean;
 };
 
-export const DEFAULT_FLAGS: SimFlags = { edges: 'default', transparentHeader: true, inverted: true, glass: true };
+export const DEFAULT_FLAGS: SimFlags = {
+  edges: 'default', transparentHeader: true, inverted: true, glass: true,
+  header: true, overlays: true, composer: true, plainInsets: false,
+};

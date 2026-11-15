@@ -94,11 +94,15 @@ async function ask(text: string, limit = 120000) {
 async function variants() {
   const tries: [string, Partial<SimFlags>][] = [
     ['as shipped', {}],
-    ['system edge effects hidden', { edges: 'hidden' }],
+    ['no header at all', { header: false }],
     ['header not transparent', { transparentHeader: false }],
     ['list not upside down', { inverted: false }],
     ['no glass', { glass: false }],
-    ['edge effects hidden and list not upside down', { edges: 'hidden', inverted: false }],
+    ['no jump button or toast', { overlays: false }],
+    ['no message box', { composer: false }],
+    ['list insets left alone', { plainInsets: true }],
+    ['system edge effects hidden', { edges: 'hidden' }],
+    ['no glass, no overlays, list not upside down', { glass: false, overlays: false, inverted: false }],
   ];
   for (const [name, change] of tries) {
     flags.set({ ...DEFAULT_FLAGS, ...change });
@@ -110,8 +114,7 @@ async function variants() {
     await ask('Explain how vaccines work in simple terms');
     await wait(800);
     step(`TRY ${name}: reply done, keyboard up`);
-    step(`DUMP ${name}`);
-    await wait(9000);
+    await wait(3500);
     keyboard(false);
     await wait(1800);
     step(`TRY ${name}: keyboard down`);
@@ -135,7 +138,8 @@ async function scenario() {
   if (!app.get().downloaded[model.id]) {
     download(model);
     step('downloading a model');
-    await until(() => !!app.get().downloaded[model.id], 240000);
+    // Background downloads do not work in a simulator build that is not signed, so do not wait long.
+    await until(() => !!app.get().downloaded[model.id], REAL ? 25000 : 60000);
     step(`download ${app.get().downloaded[model.id] ? 'finished' : `DID NOT FINISH ${JSON.stringify(app.get().downloads[model.id])}`}`);
   }
   if (!app.get().downloaded[model.id]) {
@@ -173,8 +177,11 @@ async function scenario() {
   step('keyboard still up, reply being written');
   await first;
   step(`first reply done, keyboard up ${state()}`);
+  await wait(2000);
+  // The debugger stops the app while it looks, which can take a couple of minutes.
   step('DUMP first reply done, keyboard up');
-  await wait(9000);
+  await wait(6000);
+  step('dump over');
   await wait(2500);
   keyboard(false);
   step('keyboard down after first reply');
@@ -275,7 +282,7 @@ export function runSim() {
     written = '';
   }
   // With the stand-in, replies last long enough to do things while they are being written.
-  if (!REAL) (globalThis as { pocketPace?: number }).pocketPace = 4;
+  if (!REAL) (globalThis as { pocketPace?: number }).pocketPace = 2;
   if (written.includes(' finished ')) return;
   scenario().catch((error) => step(`SCRIPT ERROR ${String((error as Error)?.stack ?? error).slice(0, 400)}`));
 }

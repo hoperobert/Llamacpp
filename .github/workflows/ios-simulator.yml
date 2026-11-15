@@ -28,7 +28,7 @@ jobs:
   simulator:
     runs-on: macos-26
     # Free on a public repository. The limit keeps a stuck run from going on.
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: native
@@ -159,11 +159,13 @@ jobs:
                 dumped="$wanted"
                 pid="$(pgrep -x "$process" | head -1)"
                 echo "$now describing the screen ($wanted), process $pid" >> shots/outside.txt
-                ( lldb --batch -p "$pid" \
-                    -o 'expr -l objc -- (BOOL)[[[[[UIApplication sharedApplication] windows] firstObject] recursiveDescription] writeToFile:[NSHomeDirectory() stringByAppendingPathComponent:@"Documents/hierarchy.txt"] atomically:YES encoding:4 error:nil]' \
-                    -o 'detach' > "shots/lldb-$wanted.txt" 2>&1 ) &
+                # Everything is cast, so the debugger does not have to load UIKit's own
+                # descriptions first, which took longer than there was time for.
+                lldb --batch -p "$pid" \
+                  -o 'expr -l objc -- (BOOL)[(id)[(id)[(id)[(id)[(Class)NSClassFromString(@"UIApplication") sharedApplication] windows] firstObject] recursiveDescription] writeToFile:(id)[(id)NSHomeDirectory() stringByAppendingPathComponent:@"Documents/hierarchy.txt"] atomically:(BOOL)1 encoding:(unsigned long)4 error:(id)0]' \
+                  -o 'detach' > "shots/lldb-$wanted.txt" 2>&1 &
                 debugger=$!
-                for wait in $(seq 1 40); do kill -0 "$debugger" 2>/dev/null || break; sleep 1; done
+                for wait in $(seq 1 150); do kill -0 "$debugger" 2>/dev/null || break; sleep 1; done
                 kill -9 "$debugger" 2>/dev/null || true
                 cp "$data/Documents/hierarchy.txt" "shots/hierarchy-$wanted.txt" 2>/dev/null || true
                 rm -f "$data/Documents/hierarchy.txt"
@@ -182,9 +184,6 @@ jobs:
             sleep 0.6
           done
           cat shots/steps.txt || true
-          # Half size is plenty to read, and keeps the branch small.
-          sips -Z 1320 shots/*.jpg > /dev/null
-          ls shots | wc -l
           # Anything the system recorded about the app closing by itself.
           cp ~/Library/Logs/DiagnosticReports/*"$process"* shots/ 2>/dev/null || true
           grep -E "\[sim\]|rror|rash|xception|Terminat|llama|Uncaught" shots/log-full.txt | tail -400 > shots/log.txt || true
@@ -195,6 +194,9 @@ jobs:
         run: |
           mkdir -p shots
           cp build.log shots/build-tail.txt 2>/dev/null && tail -200 shots/build-tail.txt > shots/build.txt && rm shots/build-tail.txt || true
+          # Half size is plenty to read, and keeps the branch small.
+          sips -Z 1320 shots/*.jpg > /dev/null 2>&1 || true
+          rm -f shots/log-full.txt
           cd shots
           echo "Screenshots from run ${{ github.run_id }} of commit ${{ github.sha }}." > README.md
           git init -q -b sim-screenshots
