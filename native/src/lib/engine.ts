@@ -51,7 +51,10 @@ export async function loadModel(
   await unloadModel();
   context = await initLlama(
     {
-      model: uri, n_ctx: nCtx, n_batch: 512, n_gpu_layers: 99, use_mlock: false,
+      model: uri, n_ctx: nCtx, n_batch: 512, n_gpu_layers: 99,
+      // The model is mapped from its file and never pinned, so iOS can page it
+      // out when the app is in the background instead of closing the app.
+      use_mmap: true, use_mlock: false,
       // Photos take a fixed place in the context, so it cannot be shifted along.
       ...(projectorUri ? { ctx_shift: false } : {}),
     },

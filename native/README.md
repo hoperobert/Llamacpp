@@ -119,7 +119,7 @@ In the preview the app's state and actions are available in the browser
 console as `pocket` (for example `pocket.app.get()`), which is how scripted
 checks drive it.
 
-## Dory support
+## Engine patch
 
 Nemotron Dory uses a model format that llama.cpp has not released support for
 yet. `patches/llama.rn+0.13.0-rc.11.patch` adds it (ported from llama.cpp pull
@@ -127,8 +127,15 @@ request 30306) and is applied on every `npm install`. Because of the patch,
 `eas.json` sets `RNLLAMA_BUILD_FROM_SOURCE=1` so the engine is compiled during
 the build instead of using the prebuilt one.
 
-When llama.rn ships Dory support itself, delete the patch, the `postinstall`
-script and that setting.
+The same patch turns off Metal residency sets on iOS. With them, the whole
+model stays wired in memory for three minutes after it was last used, which on
+a phone outlasts the app leaving the screen: iOS then closes the app rather
+than page out a 3 GB model. Without them the model is ordinary file-backed
+memory.
+
+When llama.rn ships Dory support itself, drop the Dory part of the patch. The
+`postinstall` script and the build-from-source setting stay for as long as any
+patch does.
 
 ## Code map
 
