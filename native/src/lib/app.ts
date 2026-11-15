@@ -225,12 +225,46 @@ function keepGoingAfterErrors() {
   });
 }
 
+let lookedForUpdate = 0;
+
+/**
+ * The app is rarely started from cold: it mostly comes back from the
+ * background, sometimes for days. So newer code is also looked for on return,
+ * at most every ten minutes, and switched to when nothing is going on: no
+ * reply being written and nothing typed. The model is let go first, because
+ * switching restarts the app's code and would leave it behind in memory. It is
+ * loaded again as the app starts.
+ */
+async function takeUpdateOnReturn() {
+  if (!Updates.isEnabled || Date.now() - lookedForUpdate < 10 * 60 * 1000) return;
+  lookedForUpdate = Date.now();
+  try {
+    const check = await Updates.checkForUpdateAsync();
+    if (!check.isAvailable) return;
+    const fetched = await Updates.fetchUpdateAsync();
+    const { busy, draft, engine: state } = app.get();
+    if (!fetched.isNew || busy || draft.trim() || state.status === 'loading' || AppState.currentState !== 'active') return;
+    const model = findModel(state.modelId);
+    await withEngine(() => engine.unloadModel());
+    try {
+      await Updates.reloadAsync();
+    } catch {
+      // The switch did not happen, so the model is needed again after all.
+      app.set({ engine: NO_ENGINE });
+      if (model) loadModel(model);
+    }
+  } catch {
+    // No connection, or nothing to fetch. It is tried again later.
+  }
+}
+
 let started = false;
 
 export async function start() {
   if (started) return;
   started = true;
   keepGoingAfterErrors();
+  lookedForUpdate = Date.now();
   const updated = takeUpdate();
 
   const [savedSettings, memories, chatList, marker, customModels, projects, previous] = await Promise.all([
@@ -397,6 +431,7 @@ function appStateChanged(next: string) {
     store.setLastOpen(chat.messages.length && !chat.incognito ? { chatId: chat.id, at: Date.now() } : null);
   } else if (next === 'active') {
     note({ phase: next, since: Date.now() });
+    takeUpdateOnReturn();
     resumeFailedDownloads();
     const model = loadWhenActive;
     loadWhenActive = null;
