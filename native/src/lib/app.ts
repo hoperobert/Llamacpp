@@ -10,7 +10,7 @@ import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
 
 import { onOrOff, parseCommand, subjectOf, type Command } from './commands';
-import { bestContext, DEFAULT_KV_KB, kvKBPerToken, stepBelow, trainedContext } from './context';
+import { bestContext, DEFAULT_KV_KB, kvKBPerToken, trainedContext } from './context';
 import { freeDiskMB, ramMB } from './device';
 import {
   deleteModel, fileSizeMB, isDownloaded, modelUri, pauseDownload, restoreDownloads, resumeFailedDownloads, startDownload,
@@ -194,27 +194,12 @@ export async function start() {
   ]);
   app.set({ lastClose: describeClose(previous, Date.now()) });
   note({ phase: AppState.currentState ?? 'active', since: Date.now() });
-  let settings = savedSettings;
+  const settings = savedSettings;
   // A marker left behind means the last load took the app down, most likely
   // by running out of memory. Do not auto-load into that again.
+  // A marker left behind means the last load took the app down. Do not load
+  // straight into that again; the user can choose what to do.
   if (marker) await store.setLoadMarker(null);
-  // A model that closed the app, while loading or while writing with the app on
-  // screen, most likely ran out of memory. It gets a smaller context from now on.
-  const culprit = marker
-    ? { id: marker.modelId, nCtx: marker.nCtx }
-    : previous?.phase === 'active' && previous.modelId && previous.doing.includes('writing a reply')
-      ? { id: previous.modelId, nCtx: previous.nCtx ?? settings.nCtx }
-      : null;
-  if (culprit) {
-    const lower = stepBelow(culprit.nCtx);
-    settings = {
-      ...settings,
-      contextCaps: { ...settings.contextCaps, [culprit.id]: Math.min(lower, settings.contextCaps[culprit.id] ?? lower) },
-      // A size picked by hand is brought down too.
-      ...(settings.autoContext ? {} : { nCtx: Math.min(settings.nCtx, lower) }),
-    };
-    store.saveSettings(settings);
-  }
   app.set({ settings, memories, chatList, customModels, projects, crashed: !!marker });
   repairTitles(chatList);
   // If iOS closed the app while it was in the background, carry on where it was left.
@@ -389,7 +374,6 @@ async function contextForModel(model: Model): Promise<number> {
     extraMB: addon && downloaded[addon.id] ? addon.sizeMB : 0,
     ramMB,
     trained: details ? trainedContext(details) : null,
-    cap: settings.contextCaps[model.id],
   });
 }
 
@@ -401,7 +385,7 @@ export async function loadModel(model: Model) {
   app.set({ engine: { status: 'loading', modelId: model.id, fraction: 0, error: null, gpu: false, vision: false } });
   await withEngine(async () => {
     doing('loading a model', true);
-    note({ model: null, modelId: null });
+    note({ model: null });
     const nCtx = await contextForModel(model);
     await store.setLoadMarker({ modelId: model.id, nCtx });
     await activateKeepAwakeAsync('load').catch(() => {});
@@ -416,7 +400,7 @@ export async function loadModel(model: Model) {
         app.set((s) => (s.engine.status === 'loading' ? { engine: { ...s.engine, fraction } } : {}));
       }, projector);
       app.set({ engine: { status: 'ready', modelId: model.id, fraction: 1, error: null, gpu, vision }, crashed: false });
-      note({ model: model.name, modelId: model.id, nCtx });
+      note({ model: model.name });
       // The size in use is kept in the settings, where the rest of the app reads it.
       updateSettings({ modelId: model.id, loadedOnce: true, nCtx });
       haptic('success');

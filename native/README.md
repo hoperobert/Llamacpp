@@ -139,9 +139,9 @@ On an 8 GB iPhone that gives the 2B models 8K, most 4B models 4K, Spark-X2.6
 4B 3K, and Nemotron Dory and Gemma 4 E4B 2K. Dory's context costs more than
 twice as much per token as the other 4B models.
 
-If a model closes the app while loading, or while writing a reply with the app
-on screen, it is given the next size down from then on. A size can still be
-picked by hand in Settings.
+The size depends only on the model and the phone, so the same model always
+gets the same context on the same phone. A size can still be picked by hand in
+Settings.
 
 ## Preview in a browser
 

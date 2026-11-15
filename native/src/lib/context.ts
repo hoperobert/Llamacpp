@@ -54,10 +54,6 @@ export function trainedContext(info: Record<string, unknown>): number | null {
   return numbers(info[`${arch}.context_length`])[0] ?? null;
 }
 
-/** The size below this one. The smallest stays as it is. */
-export const stepBelow = (size: number) =>
-  [...CONTEXT_STEPS].reverse().find((step) => step < size) ?? CONTEXT_STEPS[0];
-
 /**
  * The largest context that fits. It never goes below the smallest size: a
  * model too big for even that is one the phone should not be loading.
@@ -73,15 +69,13 @@ export function bestContext(model: {
   ramMB: number | null;
   /** The size the model was made for. */
   trained?: number | null;
-  /** A size not to go above, set after this model closed the app. */
-  cap?: number;
 }): number {
   const ram = model.ramMB ?? 4096;
   const room = Math.min(
     ram * TOTAL_SHARE - model.fileMB - (model.extraMB ?? 0) - OVERHEAD_MB,
     ram * CONTEXT_SHARE,
   );
-  const limit = Math.min(model.trained || Infinity, model.cap || Infinity);
+  const limit = model.trained || Infinity;
   const fits = CONTEXT_STEPS.filter((step) => step <= limit && (step * model.kvKB) / 1024 <= room);
   return fits.at(-1) ?? CONTEXT_STEPS[0];
 }

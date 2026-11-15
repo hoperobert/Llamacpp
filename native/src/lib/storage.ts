@@ -72,8 +72,6 @@ export type Settings = {
   nCtx: number;
   /** True when the context size is chosen for each model to fit this phone. nCtx then holds what was chosen. */
   autoContext: boolean;
-  /** Sizes not to go above for a model, set after it closed the app. */
-  contextCaps: Record<string, number>;
   thinking: boolean;
   /** Look things up in the offline library before answering. */
   lookup: boolean;
@@ -98,7 +96,6 @@ export const DEFAULT_SETTINGS: Settings = {
   maxTokens: 768,
   nCtx: 4096,
   autoContext: true,
-  contextCaps: {},
   thinking: false,
   lookup: false,
   memoryOn: true,

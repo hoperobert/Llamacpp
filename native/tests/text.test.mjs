@@ -97,7 +97,7 @@ assert.equal(onOrOff('maybe', true), null);
 console.log('commands: all checks passed');
 
 // ---------- context size ----------
-const { bestContext, CONTEXT_STEPS, kvKBPerToken, stepBelow, trainedContext } = await import('../src/lib/context.ts');
+const { bestContext, CONTEXT_STEPS, kvKBPerToken, trainedContext } = await import('../src/lib/context.ts');
 const { MODELS } = await import('../src/lib/models.ts');
 
 // Details as they are stored in real model files. The engine hands them over as text.
@@ -145,13 +145,8 @@ for (const model of MODELS) {
     assert.ok(size <= on(model.id, ram * 2), 'more memory never means less context');
   }
 }
-// Limits: what the model was made for, and what it was cut to after closing the app.
+// It never goes above what the model was made for.
 assert.equal(bestContext({ fileMB: 500, kvKB: 20, ramMB: 15200, trained: 4096 }), 4096);
-assert.equal(bestContext({ fileMB: 500, kvKB: 20, ramMB: 15200, cap: 3072 }), 3072);
 assert.equal(bestContext({ fileMB: 500, kvKB: 20, ramMB: null }), 8192);
 assert.equal(bestContext({ fileMB: 3000, kvKB: 128, ramMB: null }), 2048, 'an unknown phone is treated as a small one');
-assert.equal(stepBelow(4096), 3072);
-assert.equal(stepBelow(8192), 6144);
-assert.equal(stepBelow(2048), 2048);
-assert.equal(stepBelow(5000), 4096);
 console.log('context: all checks passed');

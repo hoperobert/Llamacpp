@@ -9,10 +9,8 @@ export type Session = {
   since: number;
   /** What the app was busy with, if anything. */
   doing: string[];
-  /** The model that was loaded, and the context it was given. */
+  /** The model that was loaded. */
   model: string | null;
-  modelId?: string | null;
-  nCtx?: number;
   /** Memory warnings from iOS since the app was last on screen. */
   warnings: number;
 };
