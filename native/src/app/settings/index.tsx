@@ -1,5 +1,6 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text } from 'react-native';
+import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import { Stack, useRouter } from 'expo-router';
 import {
@@ -93,7 +94,8 @@ export default function SettingsScreen() {
 
         <Text style={[styles.about, { color: t.c.tertiary }]}>
           {[
-            `Version ${Constants.expoConfig?.version ?? ''}`,
+            // The number in brackets is the build, as TestFlight shows it.
+            `Version ${Constants.expoConfig?.version ?? ''}${Application.nativeBuildVersion ? ` (${Application.nativeBuildVersion})` : ''}`,
             `llama.cpp ${engineVersion}`,
             ramMB ? `${Math.round(ramMB / 1024)} GB` : '',
             engine.status === 'ready' ? (engine.gpu ? 'GPU' : 'CPU') : '',
