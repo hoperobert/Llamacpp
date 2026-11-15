@@ -1,0 +1,18 @@
+(lldb) process attach --pid 29012
+Process 29012 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = signal SIGSTOP
+    frame #0: 0x0000000101700b70 libsystem_kernel.dylib`mach_msg2_trap + 8
+libsystem_kernel.dylib`mach_msg2_trap:
+->  0x101700b70 <+8>: ret    
+
+libsystem_kernel.dylib`macx_swapon:
+    0x101700b74 <+0>: mov    x16, #-0x30               ; =-48 
+    0x101700b78 <+4>: svc    #0x80
+    0x101700b7c <+8>: ret    
+Target 0: (PocketLLM) stopped.
+Executable binary set to "/Users/runner/Library/Developer/CoreSimulator/Devices/FCC5F673-7BEC-4A7D-8F2A-4DC35E2668EC/data/Containers/Bundle/Application/19DCC682-37F2-43D4-A826-A0C201D41EAB/PocketLLM.app/PocketLLM".
+Architecture set to: arm64-apple-ios-simulator.
+(lldb) expr -l objc -- (BOOL)[(id)[(id)[(id)[(id)[(Class)NSClassFromString(@"UIApplication") sharedApplication] windows] firstObject] recursiveDescription] writeToFile:(id)[(id)NSHomeDirectory() stringByAppendingPathComponent:@"Documents/hierarchy.txt"] atomically:(BOOL)1 encoding:(unsigned long)4 error:(id)0]
+(BOOL) $0 = YES
+(lldb) detach
+Process 29012 detached

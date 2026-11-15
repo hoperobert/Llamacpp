@@ -1,0 +1,53 @@
+1794779442676 started with the real engine. first launch. {"engine":"none","model":null,"gpu":false,"onGPU":true,"nCtx":4096,"busy":false,"messages":0,"last":null,"title":"New chat","error":null}
+1794779445195 downloading a model
+1794779473870 download DID NOT FINISH {"status":"failed","loaded":0,"total":563036064,"speed":0,"error":"unknown error"}
+1794779473877 using the spare copy of the model
+1794779497766 model {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":0,"last":null,"title":"New chat","error":null}
+1794779500270 this is the code for an older build: no running code, voice, torch or reminders
+1794779500270 emergency open
+1794779524254 first aid question: sources ["First aid: Choking"] reply "You are standing behind them. If they are holding their head up, you should lean them forward and give up to 5 sharp blows between the shoulder blades. If they are unable to cough or breathe, you shou"
+1794779526757 directions offered: {"what":{"kind":"directions","to":"Kings Cross"},"state":"proposed","asked":1794779524254}
+1794779532271 reminder left to the model: card false {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":6,"last":"assistant:31","speed":10.214862332841074,"title":"My friend is choking what do I do","error":null}
+1794779569836 emergency mode reply: "Boil the water for three minutes in a mountain setting or run it through a filter. If you cannot boil the water, add plain unscented household bleach to the water and wait 30 minutes. Do not drink sea water or urine. Do not go thirsty to save water: drink what you need and look for more." sources ["First aid: Making water safe to drink"]
+1794779571340 keyboard up, empty chat
+1794779574343 keyboard down
+1794779576353 sent first message
+1794779577569 keyboard up while thinking
+1794779581586 keyboard still up, reply being written
+1794779626554 first reply done, keyboard up {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":2,"last":"assistant:1609","speed":12.696250439634122,"title":"Explain how vaccines work in simple terms","error":null}
+1794779628556 DUMP first reply done, keyboard up
+1794779634559 dump over
+1794779685703 keyboard down after first reply
+1794779688237 sent second message
+1794779689153 keyboard up, round 1
+1794779690671 keyboard down, round 1
+1794779691586 keyboard up, round 2
+1794779693102 keyboard down, round 2
+1794779694019 keyboard up, round 3
+1794779695536 keyboard down, round 3
+1794779696452 keyboard up for the rest of the second reply
+1794779757072 second reply done, keyboard up {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":4,"last":"assistant:3283","speed":12.89477362048072,"title":"Explain how vaccines work in simple terms","error":null}
+1794779767269 stopped a reply by hand {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":5,"last":"user:65","title":"Explain how vaccines work in simple terms","error":null}
+1794779769274 LEAVE idle
+1794779784550 returned (idle) {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":5,"last":"user:65","title":"Explain how vaccines work in simple terms","error":null}
+1794779802436 LEAVE with half a reply written
+1794779815821 returned (with half a reply written) {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":true,"live":176,"messages":6,"last":"user:52","title":"Explain how vaccines work in simple terms","error":null}
+1794779815821 written while away: 55 characters (121 -> 176) {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":true,"live":176,"messages":6,"last":"user:52","title":"Explain how vaccines work in simple terms","error":null}
+1794779815821 carrying on? {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":true,"live":176,"messages":6,"last":"user:52","title":"Explain how vaccines work in simple terms","error":null}
+1794779880820 carried on: YES (121 -> 3662). Join: "tone tower, a silent sentinel standing tall against the vastness of the blue. The keeper, an old man whose eyes had long since turned gray and whose hands were " {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":7,"last":"assistant:3662","speed":14.694248889386829,"title":"Explain how vaccines work in simple terms","error":null}
+1794779915386 LEAVE while it was thinking
+1794779925769 returned (while it was thinking) {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":true,"live":103,"messages":8,"last":"user:33","title":"Explain how vaccines work in simple terms","error":null}
+1794779996321 asked again: YES {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":9,"last":"assistant:3388","speed":13.802317238109893,"title":"Explain how vaccines work in simple terms","error":null}
+1794780002826 new chat. Earlier chats: ["Explain how vaccines work in simple terms","Hold them down firmly"] {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":0,"last":null,"title":"New chat","error":null}
+1794780097904 planned {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":2,"last":"assistant:2906","speed":8.660192463349519,"title":"a weekend in Rome","error":null}
+1794780097906 command list open
+1794780102219 LEAVE while a model is loading
+1794780116736 returned (while a model is loading) {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":2,"last":"assistant:2906","speed":8.660192463349519,"title":"a weekend in Rome","error":null}
+1794780116737 after leaving during a load {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":2,"last":"assistant:2906","speed":8.660192463349519,"title":"a weekend in Rome","error":null}
+1794780165069 replied after the reload {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":4,"last":"assistant:5","speed":9.287055819529607,"title":"a weekend in Rome","error":null}
+1794780165070 side menu open
+1794780168776 models open
+1794780172481 library open
+1794780176185 reply options open
+1794780179889 settings open
+1794780184603 finished {"engine":"ready","model":"qwen35-0.8b","gpu":true,"onGPU":true,"nCtx":8192,"busy":false,"messages":4,"last":"assistant:5","speed":9.287055819529607,"title":"a weekend in Rome","error":null}
