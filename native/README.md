@@ -107,6 +107,10 @@ For a different Expo or Apple account, remove `owner` and `extra.eas` from
 
   Another source is one entry in `src/lib/sources.ts`: a Parquet file with a
   column of titles and a column of text.
+- **Code runs on the phone.** A JavaScript block in a reply has a Run button
+  and an HTML one has Preview. The code runs in a web view of its own, shut
+  away from the app and its files and with no internet. What it prints, or the
+  error it stops on, can be sent back to the model in one tap to be fixed.
 - **Projects** group chats that share instructions.
 - **Incognito chats** are never saved, named or used for memories.
 - **Any message** you sent can be taken back and changed.
@@ -221,6 +225,7 @@ patch does.
 | `src/lib/library.ts` | The offline library: indexing those downloads and your files. |
 | `src/lib/retrieval.ts` | Choosing the passages that fit a question. |
 | `src/lib/images.ts` | Photos attached to messages. |
+| `src/lib/runner.ts` | Running code a model wrote: what can be run, and the page that runs it. |
 | `src/lib/storage.ts` | Settings and other small preferences. |
 | `src/ui/` | Shared pieces: messages, the message box, lists, Markdown, icons. |
 

@@ -39,6 +39,7 @@ export default function RootLayout() {
         <Stack.Screen name="settings" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="projects" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="library" options={{ title: 'Library', presentation: 'modal' }} />
+        <Stack.Screen name="run" options={{ title: 'Run', presentation: 'modal' }} />
         <Stack.Screen
           name="options"
           options={{

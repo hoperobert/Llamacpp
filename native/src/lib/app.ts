@@ -32,6 +32,7 @@ import {
   blankChat, chatAsMarkdown, DEFAULT_SETTINGS, newId, store, STYLES,
   type Chat, type ChatMeta, type Memory, type Message, type Project, type Settings,
 } from './storage';
+import { runnable, type Runnable } from './runner';
 import { asks, referenceText, worthLookingUp, worthUsing, type Passage } from './retrieval';
 import { describeClose, type Session } from './session';
 import { createStore } from './store';
@@ -79,6 +80,8 @@ type State = {
   lastError: string;
   toast: string;
   speakingId: string | null;
+  /** The code on the Run screen. */
+  run: { kind: Runnable; lang: string; code: string } | null;
 };
 
 const NO_ENGINE: EngineState = { status: 'none', modelId: null, fraction: 0, error: null, gpu: false, vision: false };
@@ -107,6 +110,7 @@ export const app = createStore<State>({
   lastError: '',
   toast: '',
   speakingId: null,
+  run: null,
 });
 
 export const allModels = () => [...MODELS, ...app.get().customModels];
@@ -881,6 +885,27 @@ function sourceName(passage: Passage): string {
   const source = SOURCES.find((s) => s.id === passage.source);
   if (!source) return passage.source.replace(/\.[a-z0-9]+$/i, '');
   return source.name.startsWith('Wikipedia') ? 'Wikipedia' : source.name;
+}
+
+/**
+ * Says something to the model on the user's behalf, such as what a run of its code printed.
+ * It waits its turn if a reply is being written, and waits in the message box if no model is loaded.
+ */
+export function tellModel(text: string) {
+  const { busy, engine: state } = app.get();
+  if (busy) app.set({ queued: text });
+  else if (state.status === 'ready') send(text);
+  else app.set({ draft: text });
+}
+
+/** Puts a block of code on the Run screen. False if it is not something that can be run here. */
+export function runCode(lang: string, code: string): boolean {
+  const kind = runnable(lang, code);
+  if (!kind) return false;
+  haptic();
+  app.set({ run: { kind, lang, code } });
+  router.push('/run');
+  return true;
 }
 
 /** Lets the user pick a photo, or take one, to send with their next message. */

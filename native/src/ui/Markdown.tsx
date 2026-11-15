@@ -4,14 +4,15 @@
 
 import React from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { copyText } from '../lib/app';
+import { copyText, runCode } from '../lib/app';
+import { runnable } from '../lib/runner';
 import { Icon } from './Icon';
 import type { Theme } from './theme';
 
 type Block =
   | { type: 'p' | 'quote'; text: string }
   | { type: 'h'; text: string; level: number }
-  | { type: 'code'; text: string; lang: string }
+  | { type: 'code'; text: string; lang: string; closed: boolean }
   | { type: 'list'; ordered: boolean; start: number; items: { text: string; depth: number }[] }
   | { type: 'table'; head: string[]; rows: string[][] }
   | { type: 'rule' };
@@ -41,8 +42,10 @@ function parse(source: string): Block[] {
       const code: string[] = [];
       i++;
       while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) code.push(lines[i++]);
+      // Still being written if its closing line has not arrived.
+      const closed = i < lines.length;
       i++;
-      blocks.push({ type: 'code', text: code.join('\n'), lang: fence[1] });
+      blocks.push({ type: 'code', text: code.join('\n'), lang: fence[1], closed });
     } else if (!line.trim()) {
       i++;
     } else if (HEADING.test(line)) {
@@ -127,10 +130,24 @@ function Inline({ text, t }: { text: string; t: Theme }) {
 }
 
 function CodeBlock({ block, t }: { block: Extract<Block, { type: 'code' }>; t: Theme }) {
+  const kind = block.closed ? runnable(block.lang, block.text) : null;
   return (
     <View style={[styles.code, { backgroundColor: t.c.fill }]}>
       <View style={styles.codeHead}>
-        <Text style={[styles.codeLang, { color: t.c.secondary }]}>{block.lang || 'code'}</Text>
+        <Text style={[styles.codeLang, styles.flex, { color: t.c.secondary }]}>{block.lang || 'code'}</Text>
+        {!!kind && (
+          <Pressable
+            onPress={() => runCode(block.lang, block.text)}
+            hitSlop={10}
+            accessibilityLabel={kind === 'page' ? 'Preview page' : 'Run code'}
+            style={({ pressed }) => [styles.codeCopy, pressed && styles.dim]}
+          >
+            <Icon name="play.fill" size={12} color={t.c.accent} />
+            <Text style={[styles.codeLang, styles.bold, { color: t.c.accent }]}>
+              {kind === 'page' ? 'Preview' : 'Run'}
+            </Text>
+          </Pressable>
+        )}
         <Pressable
           onPress={() => copyText(block.text)}
           hitSlop={10}
@@ -241,7 +258,7 @@ const styles = StyleSheet.create({
   inlineCode: { fontFamily: 'Menlo' },
   code: { borderRadius: 16, borderCurve: 'continuous', overflow: 'hidden' },
   codeHead: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', gap: 18,
     paddingHorizontal: 14, paddingTop: 10,
   },
   codeLang: { fontSize: 13 },

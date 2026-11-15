@@ -16,6 +16,8 @@ export function systemPrompt(chat: Chat, settings: Settings, memories: Memory[],
   const parts = [
     "You are a helpful assistant running privately on the user's own device. " +
       `Keep answers clear and concise. Today is ${new Date().toDateString()}.`,
+    // The Run button on a code block. Said so that a model asked for something to run picks a language that can be.
+    'The user can run JavaScript, and open HTML pages, that you write in code blocks on this device.',
   ];
   const style = STYLES.find((s) => s.id === settings.style)?.prompt;
   if (style) parts.push(style);

@@ -181,3 +181,35 @@ assert.equal(splitThinking('Done.<turn|>').content, 'Done.');
 assert.equal(splitThinking('<|channel>final\nThe answer is 4.').content, 'The answer is 4.');
 assert.equal(withoutThinking(gemma), 'This looks like low-growing ground cover, but the photo is too blurry to name it.');
 console.log('thinking: all checks passed');
+
+// ---------- running code ----------
+const { runnable, runnerPage, outputText, reportFor, failed } = await import('../src/lib/runner.ts');
+assert.equal(runnable('js', 'console.log(1)'), 'script');
+assert.equal(runnable('JavaScript', 'console.log(1)'), 'script');
+assert.equal(runnable('html', '<p>hi</p>'), 'page');
+assert.equal(runnable('svg', '<svg></svg>'), 'page');
+assert.equal(runnable('', '<!DOCTYPE html>\n<html></html>'), 'page');
+assert.equal(runnable('', 'console.log(1)'), null);                 // no language named: not guessed at
+assert.equal(runnable('python', 'print(1)'), null);
+assert.equal(runnable('ts', 'const a: number = 1'), null);
+assert.equal(runnable('js', '   '), null);
+// Code that mentions "</script>" must not end the script it is carried in.
+const carried = runnerPage('script', 'console.log("</script><script>alert(1)</script>")');
+assert.equal(carried.split('</script>').length, 3);                 // the bridge's and the runner's own, no more
+assert.ok(carried.includes("default-src 'none'"));
+// A page of the model's own keeps its doctype first, with the no-internet rule ahead of everything else in it.
+const shown = runnerPage('page', '<!DOCTYPE html>\n<html><head><script src="https://example.com/x.js"></script></head></html>');
+assert.ok(shown.startsWith('<!DOCTYPE html><meta http-equiv="Content-Security-Policy"'));
+assert.ok(shown.indexOf('Content-Security-Policy') < shown.indexOf('example.com'));
+assert.ok(runnerPage('page', '<p>hi</p>').startsWith('<!doctype html><meta'));
+assert.ok(runnerPage('page', '<svg width="10"></svg>').includes('place-items:center'));
+const printed = [{ kind: 'log', text: '1' }, { kind: 'log', text: '2' }, { kind: 'done', text: '' }];
+assert.equal(outputText(printed), '1\n2');
+assert.equal(outputText([{ kind: 'log', text: 'x'.repeat(50) }], 10), `…${'x'.repeat(10)}`);
+assert.equal(failed(printed), false);
+assert.equal(reportFor(printed), 'I ran the code. It printed:\n\n```\n1\n2\n```');
+assert.equal(reportFor([]), 'I ran the code. It printed nothing.');
+const broke = [{ kind: 'error', text: 'ReferenceError: x is not defined' }];
+assert.equal(failed(broke), true);
+assert.ok(reportFor(broke).startsWith('I ran the code and it went wrong. Fix it.'));
+console.log('running code: all checks passed');
