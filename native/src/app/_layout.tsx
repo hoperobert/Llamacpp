@@ -29,14 +29,7 @@ export default function RootLayout() {
     <ThemeProvider value={theme}>
       <StatusBar style={t.c.dark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerTintColor: t.c.text, headerShadowVisible: false }}>
-        <Stack.Screen
-          name="index"
-          options={{
-            title: '', headerTransparent: true,
-            // See the chat screen: the system's dimming under bars misplaces itself on the message list.
-            scrollEdgeEffects: { top: 'hidden', bottom: 'hidden', left: 'hidden', right: 'hidden' },
-          }}
-        />
+        <Stack.Screen name="index" options={{ title: '', headerTransparent: true }} />
         <Stack.Screen
           name="chats"
           options={{ headerShown: false, presentation: 'transparentModal', animation: 'none' }}

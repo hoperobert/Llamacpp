@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View,
+  Alert, Animated, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import { Icon, type IconName } from '../ui/Icon';
 import { MessageRow } from '../ui/Message';
 import { ModelRow } from '../ui/ModelRow';
 import { Toast } from '../ui/Toast';
+import { useKeyboardInset } from '../ui/keyboard';
 import { serif, useTheme, type Theme } from '../ui/theme';
 
 const SUGGESTIONS: { icon: IconName; title: string; prompt: string }[] = [
@@ -59,28 +60,14 @@ export default function ChatScreen() {
   ), [t]);
 
   const empty = rows.length === 0;
-
-  // iOS 26 dims and blurs a list where it runs under the bars around it. The
-  // message list is drawn upside down so that it grows from the bottom, and the
-  // system then puts that effect in the wrong place: with the keyboard up it
-  // covered the whole chat. The header has its own backdrop (TopFade), so the
-  // system's is switched off. It is applied to the list that exists at the
-  // time, so it is sent again whenever a list appears or changes size (which
-  // is also when the keyboard comes and goes).
-  const [resend, setResend] = useState(false);
-  const onListLayout = useCallback(() => setResend((value) => !value), []);
-  const edgeEffects = useMemo(() => ({
-    top: 'hidden' as const, bottom: 'hidden' as const, right: 'hidden' as const,
-    // This edge never shows anything on a list that scrolls up and down. Changing it is what sends the rest again.
-    left: resend ? 'hidden' as const : 'automatic' as const,
-  }), [resend]);
+  const showJump = scrolledUp && !empty;
+  const keyboardInset = useKeyboardInset();
 
   return (
     <View style={[styles.flex, { backgroundColor: t.c.bg }]}>
-      <Stack.Screen options={{ scrollEdgeEffects: edgeEffects }} />
-      {/* The list comes first: the system setting above reaches the first list it finds from the top. */}
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        {/* The floating pieces sit inside this view so they rise with the keyboard. */}
+      {/* Everything in here rises with the keyboard. See useKeyboardInset for why this is done by hand. */}
+      <Animated.View style={[styles.flex, { paddingBottom: keyboardInset }]}>
+        {/* The floating pieces are placed against this inner view, which ends where the keyboard begins. */}
         <View style={styles.flex}>
         {!hydrated ? null : empty ? (
           <ScrollView
@@ -88,7 +75,6 @@ export default function ChatScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
-            onLayout={onListLayout}
           >
             {ready ? <Greeting t={t} /> : <Welcome t={t} />}
           </ScrollView>
@@ -97,7 +83,6 @@ export default function ChatScreen() {
             ref={list}
             data={rows}
             inverted
-            onLayout={onListLayout}
             keyExtractor={(row) => row.key}
             renderItem={renderItem}
             // Inverted, so "top" padding is the space above the message box.
@@ -112,23 +97,25 @@ export default function ChatScreen() {
           />
         )}
 
-        {scrolledUp && !empty && (
-          <Pressable
-            onPress={() => list.current?.scrollToOffset({ offset: 0, animated: true })}
-            accessibilityRole="button"
-            accessibilityLabel="Scroll to the latest message"
-            style={[styles.jump, { bottom: composerHeight + 8 }]}
-          >
-            <Glass c={t.c} interactive style={styles.jumpGlass}>
-              <Icon name="arrow.down" size={18} color={t.c.text} weight="semibold" />
-            </Glass>
-          </Pressable>
-        )}
-        <TopFade t={t} height={headerHeight} />
+        {/* Always there and only shown when wanted, so that nothing is added to or taken from the screen as it moves. */}
+        <Pressable
+          onPress={() => list.current?.scrollToOffset({ offset: 0, animated: true })}
+          accessibilityRole="button"
+          accessibilityLabel="Scroll to the latest message"
+          accessibilityElementsHidden={!showJump}
+          pointerEvents={showJump ? 'auto' : 'none'}
+          style={[styles.jump, { bottom: composerHeight + 8, opacity: showJump ? 1 : 0 }]}
+        >
+          <Glass c={t.c} interactive style={styles.jumpGlass}>
+            <Icon name="arrow.down" size={18} color={t.c.text} weight="semibold" />
+          </Glass>
+        </Pressable>
         <Toast bottom={composerHeight + 10} />
         <Composer t={t} onHeight={setComposerHeight} />
         </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
+      {/* Outside what moves with the keyboard, so it is never part of that. */}
+      <TopFade t={t} height={headerHeight} />
       <Header />
     </View>
   );
@@ -166,17 +153,20 @@ function buildRows(
 // ---------- header ----------
 
 const FADE_STEPS = [0.94, 0.86, 0.72, 0.54, 0.34, 0.16];
+const FADE_STEP = 4;
 
 /**
  * A soft backdrop behind the header, so messages scrolling under it never
  * collide with the title. It is solid at the top and fades out below.
  */
 function TopFade({ t, height }: { t: Theme; height: number }) {
+  const solid = Math.min(170, Math.max(0, height - 6));
   return (
-    <View pointerEvents="none" style={styles.fade}>
-      <View style={{ height: Math.min(170, Math.max(0, height - 6)), backgroundColor: t.c.bg, opacity: 0.94 }} />
+    // The height is fixed and anything beyond it is cut off, so no part of the fade can ever cover the chat.
+    <View pointerEvents="none" style={[styles.fade, { height: solid + FADE_STEPS.length * FADE_STEP }]}>
+      <View style={{ height: solid, backgroundColor: t.c.bg, opacity: 0.94 }} />
       {FADE_STEPS.map((opacity) => (
-        <View key={opacity} style={{ height: 4, backgroundColor: t.c.bg, opacity }} />
+        <View key={opacity} style={{ height: FADE_STEP, backgroundColor: t.c.bg, opacity }} />
       ))}
     </View>
   );
@@ -380,7 +370,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   dim: { opacity: 0.5 },
   emptyBody: { flexGrow: 1, paddingHorizontal: 20 },
-  fade: { position: 'absolute', top: 0, left: 0, right: 0 },
+  fade: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
   jump: { position: 'absolute', alignSelf: 'center' },
   jumpGlass: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   pill: {

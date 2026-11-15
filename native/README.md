@@ -117,6 +117,15 @@ quiet: a paper-like palette with a blue accent.
   they wait until the chat is left, so the next reply does not have to re-read
   the whole conversation.
 
+## The keyboard
+
+The chat makes room for the keyboard by hand (`src/ui/keyboard.ts`) rather
+than with React Native's `KeyboardAvoidingView`. That component animates the
+whole layout, and when the screen was also being redrawn (a reply being
+written) a strip of the fade behind the header was left stretched over the
+chat, dimming it. Here one number is animated and the layout follows it, and
+the fade has a fixed height that nothing inside it can grow past.
+
 ## Context size
 
 How much a model can keep in mind at once is chosen for each model, to fit the
