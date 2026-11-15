@@ -18,6 +18,8 @@ import Vision
 public class PocketNativeModule: Module {
   /// The iOS 26 task, held as AnyObject because the type does not exist before iOS 26.
   private var continued: AnyObject?
+  /** The name of the work asked for, kept so that it can be withdrawn if iOS has not started it. */
+  private var asked: String?
   private var short: UIBackgroundTaskIdentifier = .invalid
 
   public func definition() -> ModuleDefinition {
@@ -135,6 +137,7 @@ public class PocketNativeModule: Module {
     let request = BGContinuedProcessingTaskRequest(identifier: identifier, title: title, subtitle: subtitle)
     do {
       try BGTaskScheduler.shared.submit(request)
+      self.asked = identifier
       return true
     } catch {
       return false
@@ -146,8 +149,12 @@ public class PocketNativeModule: Module {
       if let task = self.continued as? BGContinuedProcessingTask {
         task.progress.completedUnitCount = task.progress.totalUnitCount
         task.setTaskCompleted(success: success)
+      } else if let asked = self.asked {
+        // Asked for but never started by iOS: withdraw it, or it could start later with nothing to do.
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: asked)
       }
     }
+    self.asked = nil
     self.continued = nil
     self.endShort()
   }
