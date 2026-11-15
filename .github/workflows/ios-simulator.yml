@@ -27,7 +27,8 @@ concurrency:
 jobs:
   simulator:
     runs-on: macos-26
-    timeout-minutes: 75
+    # Free on a public repository. The limit keeps a stuck run from going on.
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: native
